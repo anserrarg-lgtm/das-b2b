@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@700,800&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --color-bg-primary: #171D1C;
+  --color-bg-sidebar: #121716;
+  --color-accent-green: #B0FF92;
+  --color-accent-blue: #5863F8;
+  --color-accent-info: #5FBFF9;
+  --color-accent-warning: #F5B942;
+  --color-accent-danger: #FF6B6B;
+  --color-text-primary: #F5F7F7;
+  --color-text-secondary: #A3AEAC;
+  --color-text-muted: #6F7876;
+  --font-cabinet: 'Cabinet Grotesk', sans-serif;
+  --font-dm: 'DM Sans', sans-serif;
+  --font-satoshi: 'Satoshi', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background-color: #121716;
+  color: #F5F7F7;
+  min-width: 1280px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.font-clash {
+  font-family: 'Cabinet Grotesk', sans-serif !important;
+  font-weight: 700 !important;
+}
+
+.font-satoshi {
+  font-family: 'Satoshi', sans-serif;
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.glass-strong {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+}
+
+.glass-sidebar {
+  background: #121716;
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  color: #F5F7F7;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+  padding: 8px 12px;
+  outline: none;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+select:focus {
+  outline: none;
+  border-color: rgba(255, 255, 255, 0.06);
+}
+
+select option {
+  background: #1E2524;
+  color: #F5F7F7;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 14px;
+}
+
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+@keyframes beaconBreathe1 {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1;   }
+}
+
+@keyframes beaconBreathe2 {
+  0%, 100% { opacity: 0.45; }
+  50%       { opacity: 0.85; }
+}
+
+@keyframes beaconBreathe3 {
+  0%, 100% { opacity: 0.3; }
+  50%       { opacity: 0.65; }
+}
