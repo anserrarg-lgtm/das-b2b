@@ -41,7 +41,7 @@ export default function App() {
           <Route path="/" element={<PipelineBoard />} />
           <Route path="/notificaciones" element={<NotificationCenter />} />
           <Route path="/importar" element={<ImportScreen />} />
-          <Route path="/oportunidad/:id" element={<OpportunityDetail />} />
+          <Route path="/oportunidad/:id" element={<OpportunityDetail isSidebarCollapsed={isCollapsed} />} />
           <Route path="/opportunity/:id/pulse-check" element={<PulseCheckPage />} />
           <Route path="/partners" element={<PartnersPage />} />
           <Route path="/perfil" element={<ProfilePage />} />

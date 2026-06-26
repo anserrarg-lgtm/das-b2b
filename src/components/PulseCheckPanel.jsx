@@ -117,7 +117,7 @@ const SUGGESTED_MESSAGES = {
   default: '¿Cómo va todo? ¿Hay algo en lo que podamos ayudarte?',
 }
 
-export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onToggleExpand }) {
+export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onToggleExpand, sidebarCollapsed = false }) {
   const messagesEndRef = useRef(null)
   const [messageText, setMessageText] = useState('')
   const [useDefault, setUseDefault] = useState(true)
@@ -152,16 +152,23 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
   const messagesByDate = groupMessagesByDate(MOCK_MESSAGES)
   const sortedDates = Object.keys(messagesByDate).sort()
 
-  const panelWidth = isExpanded ? '100%' : '45%'
-  const leftOffset = isExpanded ? 0 : 'calc(55% - 1px)'
+  const sidebarWidth = sidebarCollapsed ? 64 : 240
+
+  let panelWidth, panelLeft
+  if (isExpanded) {
+    panelWidth = `calc(100% - ${sidebarWidth}px)`
+    panelLeft = sidebarWidth
+  } else {
+    panelWidth = '45%'
+    panelLeft = 'calc(55% - 1px)'
+  }
 
   return createPortal(
     <div
       style={{
         position: 'fixed',
         top: 0,
-        left: leftOffset,
-        right: 0,
+        left: panelLeft,
         width: panelWidth,
         height: '100vh',
         background: '#121716',
@@ -254,8 +261,7 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
               display: 'flex',
               alignItems: 'center',
               gap: 8,
-              fontSize: 13,
-              color: '#6F7876',
+              fontSize: 15,
               fontFamily: 'DM Sans, sans-serif',
             }}
           >
@@ -264,18 +270,19 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#6F7876',
+                color: '#A3AEAC',
                 cursor: 'pointer',
                 transition: 'color 0.15s',
                 padding: 0,
-                fontSize: 13,
+                fontSize: 15,
+                fontWeight: 400,
               }}
-              onMouseEnter={e => e.currentTarget.style.color = '#A3AEAC'}
-              onMouseLeave={e => e.currentTarget.style.color = '#6F7876'}
+              onMouseEnter={e => e.currentTarget.style.color = '#F5F7F7'}
+              onMouseLeave={e => e.currentTarget.style.color = '#A3AEAC'}
             >
               Pipeline
             </button>
-            <span>·</span>
+            <span style={{ color: '#6F7876', fontWeight: 400 }}>·</span>
             <button
               onClick={() => {
                 onToggleExpand()
@@ -283,19 +290,20 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
               style={{
                 background: 'none',
                 border: 'none',
-                color: '#6F7876',
+                color: '#F5F7F7',
                 cursor: 'pointer',
                 transition: 'color 0.15s',
                 padding: 0,
-                fontSize: 13,
+                fontSize: 15,
+                fontWeight: 500,
               }}
-              onMouseEnter={e => e.currentTarget.style.color = '#A3AEAC'}
-              onMouseLeave={e => e.currentTarget.style.color = '#6F7876'}
+              onMouseEnter={e => e.currentTarget.style.color = '#B0FF92'}
+              onMouseLeave={e => e.currentTarget.style.color = '#F5F7F7'}
             >
               {op.nombre}
             </button>
-            <span>·</span>
-            <span style={{ color: '#A3AEAC' }}>Conversación</span>
+            <span style={{ color: '#6F7876', fontWeight: 400 }}>·</span>
+            <span style={{ color: '#B0FF92', fontWeight: 500, fontSize: 15 }}>Conversación</span>
           </div>
         )}
       </div>

@@ -39,7 +39,7 @@ const PULSE_ESTADO_CONFIG = {
   'Respondido': { color: '#B0FF92', bg: 'rgba(176,255,146,0.1)', border: 'rgba(176,255,146,0.2)' },
 }
 
-export default function OpportunityDetail() {
+export default function OpportunityDetail({ isSidebarCollapsed = false }) {
   const { id } = useParams()
   const { oportunidades, toggleAutomatico, enviarPulseCheck, agregarNota, cerrarComoGanada, cerrarComoPerdida } = useApp()
   const navigate = useNavigate()
@@ -417,6 +417,7 @@ export default function OpportunityDetail() {
         }}
         isExpanded={pulseCheckPanelExpanded}
         onToggleExpand={() => setPulseCheckPanelExpanded(!pulseCheckPanelExpanded)}
+        sidebarCollapsed={isSidebarCollapsed}
       />
     </div>
   )
