@@ -1,4 +1,4 @@
-import { CheckCircle, Clock, XCircle, User, Zap, Send, Mail, MessageCircle, ToggleRight, ToggleLeft, X, Maximize2, Minimize2 } from 'lucide-react'
+import { CheckCircle, Clock, XCircle, User, Zap, Send, Mail, MessageCircle, ToggleRight, ToggleLeft, Maximize2, Minimize2, ChevronRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ESTADO_CONFIG } from '../data/mockData'
@@ -178,8 +178,8 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
         style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '12px 16px',
+          gap: 12,
+          padding: '10px 14px',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
           background: 'rgba(18,23,22,0.5)',
           backdropFilter: 'blur(24px)',
@@ -187,53 +187,7 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
           flexShrink: 0,
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            fontSize: 13,
-            color: '#6F7876',
-            fontFamily: 'DM Sans, sans-serif',
-          }}
-        >
-          <button
-            onClick={() => window.location.href = '/'}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#6F7876',
-              cursor: 'pointer',
-              transition: 'color 0.15s',
-              padding: 0,
-              fontSize: 13,
-            }}
-            onMouseEnter={e => e.currentTarget.style.color = '#A3AEAC'}
-            onMouseLeave={e => e.currentTarget.style.color = '#6F7876'}
-          >
-            Pipeline
-          </button>
-          <span>·</span>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#6F7876',
-              cursor: 'pointer',
-              transition: 'color 0.15s',
-              padding: 0,
-              fontSize: 13,
-            }}
-            onMouseEnter={e => e.currentTarget.style.color = '#A3AEAC'}
-            onMouseLeave={e => e.currentTarget.style.color = '#6F7876'}
-          >
-            {op.nombre}
-          </button>
-          <span>·</span>
-          <span style={{ color: '#A3AEAC' }}>Conversación</span>
-        </div>
-
+        {/* Action Buttons (always visible) */}
         <div style={{ display: 'flex', gap: 8 }}>
           <button
             onClick={onToggleExpand}
@@ -249,6 +203,7 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
               alignItems: 'center',
               justifyContent: 'center',
               transition: 'all 0.15s',
+              flexShrink: 0,
             }}
             onMouseEnter={e => {
               e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
@@ -275,6 +230,7 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
               alignItems: 'center',
               justifyContent: 'center',
               transition: 'all 0.15s',
+              flexShrink: 0,
             }}
             onMouseEnter={e => {
               e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
@@ -285,9 +241,59 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
               e.currentTarget.style.color = '#6F7876'
             }}
           >
-            <X size={16} strokeWidth={1.5} />
+            <ChevronRight size={16} strokeWidth={1.5} />
           </button>
         </div>
+
+        {/* Breadcrumb (only visible when expanded) */}
+        {isExpanded && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 13,
+              color: '#6F7876',
+              fontFamily: 'DM Sans, sans-serif',
+            }}
+          >
+            <button
+              onClick={() => window.location.href = '/'}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#6F7876',
+                cursor: 'pointer',
+                transition: 'color 0.15s',
+                padding: 0,
+                fontSize: 13,
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#A3AEAC'}
+              onMouseLeave={e => e.currentTarget.style.color = '#6F7876'}
+            >
+              Pipeline
+            </button>
+            <span>·</span>
+            <button
+              onClick={onClose}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#6F7876',
+                cursor: 'pointer',
+                transition: 'color 0.15s',
+                padding: 0,
+                fontSize: 13,
+              }}
+              onMouseEnter={e => e.currentTarget.style.color = '#A3AEAC'}
+              onMouseLeave={e => e.currentTarget.style.color = '#6F7876'}
+            >
+              {op.nombre}
+            </button>
+            <span>·</span>
+            <span style={{ color: '#A3AEAC' }}>Conversación</span>
+          </div>
+        )}
       </div>
 
       {/* Messages Area */}
