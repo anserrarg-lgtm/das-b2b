@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Send, StickyNote, ToggleLeft, ToggleRight, CheckCircle2, CheckCircle, MessageSquare, Clock, Plus, XCircle, ChevronDown } from 'lucide-react'
+import { ArrowLeft, Send, StickyNote, ToggleLeft, ToggleRight, CheckCircle2, CheckCircle, MessageSquare, Clock, Plus, XCircle, MessageCircle, ChevronDown } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { ESTADO_CONFIG } from '../data/mockData'
 import { useState } from 'react'
@@ -311,6 +311,37 @@ export default function OpportunityDetail() {
                     </div>
                   )
                 })}
+
+                {/* Abrir conversación button */}
+                <button
+                  onClick={() => navigate(`/opportunity/${op.id}/pulse-check`)}
+                  style={{
+                    marginTop: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 8,
+                    color: '#A3AEAC',
+                    fontSize: 13,
+                    cursor: 'pointer',
+                    fontFamily: 'DM Sans, sans-serif',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.color = '#F5F7F7'
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.color = '#A3AEAC'
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
+                  }}
+                >
+                  <MessageCircle size={15} strokeWidth={1.5} />
+                  Abrir conversación
+                </button>
               </div>
             )}
           </Section>
@@ -557,7 +588,7 @@ function PulseSchedule({ op, onToggle }) {
           {/* Next send */}
           <p style={{ fontSize: 12, color: '#6F7876', margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
             Próximo envío:{' '}
-            <span style={{ fontFamily: 'Cabinet Grotesk, sans-serif', fontWeight: 700, color: '#A3AEAC' }}>
+            <span style={{ fontFamily: 'Satoshi, sans-serif', fontWeight: 700, color: '#A3AEAC' }}>
               {calcularProximoEnvio()}
             </span>
           </p>
@@ -704,7 +735,7 @@ function StatusBadge({ config }) {
       boxShadow: `0 0 12px rgba(${hexToRgb(config.color)},0.3), inset 0 0 8px rgba(${hexToRgb(config.color)},0.05)`,
     }}>
       <div style={{ width: 7, height: 7, borderRadius: '50%', background: config.dot, boxShadow: `0 0 8px ${config.dot}` }} />
-      <span style={{ fontSize: 13, fontWeight: 700, color: config.color, fontFamily: 'Cabinet Grotesk, sans-serif' }}>
+      <span style={{ fontSize: 13, fontWeight: 700, color: config.color, fontFamily: 'Satoshi, sans-serif' }}>
         {config.label}
       </span>
     </div>
