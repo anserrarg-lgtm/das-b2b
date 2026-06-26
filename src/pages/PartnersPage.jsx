@@ -50,7 +50,7 @@ export default function PartnersPage() {
     <div style={{ padding: '88px 40px 64px' }}>
 
       {/* Header */}
-      <h1 className="font-clash" style={{ fontSize: 48, fontWeight: 700, color: '#F5F7F7', margin: '0 0 8px', letterSpacing: '-0.03em', lineHeight: 1 }}>
+      <h1 style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 300, fontSize: 48, color: '#F5F7F7', margin: '0 0 8px', letterSpacing: '-0.03em', lineHeight: 1 }}>
         Partners
       </h1>
       <p style={{ fontSize: 14, color: '#A3AEAC', margin: '0 0 24px', fontFamily: 'DM Sans, sans-serif' }}>
@@ -130,7 +130,7 @@ function PartnerRow({ partner, onVerOportunidades }) {
 
       {/* Middle — 3 metrics */}
       <div style={{ flex: 1, display: 'flex', justifyContent: 'space-around', alignItems: 'center' }}>
-        <MetricPill label="Activas" value={partner.activeOps} />
+        <MetricPill label="Ops" value={partner.activeOps} />
         <MetricPill
           label="Sin respuesta"
           value={partner.sinRespuesta}

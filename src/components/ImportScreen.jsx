@@ -24,10 +24,9 @@ export default function ImportScreen() {
       {/* Header */}
       <div style={{ marginBottom: 36 }}>
         <h1
-          className="font-clash"
-          style={{ fontSize: 36, fontWeight: 700, color: '#F5F7F7', margin: 0, letterSpacing: '-0.02em' }}
+          style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 300, fontSize: 48, color: '#F5F7F7', margin: 0, letterSpacing: '-0.03em', lineHeight: 1 }}
         >
-          Importar datos
+          Importar
         </h1>
         <p style={{ fontSize: 14, color: '#6F7876', margin: '8px 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.5 }}>
           Conecta tus fuentes de datos para comenzar a monitorear oportunidades con tus partners.

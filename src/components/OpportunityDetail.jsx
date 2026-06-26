@@ -4,6 +4,7 @@ import { useApp } from '../context/AppContext'
 import { ESTADO_CONFIG } from '../data/mockData'
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
+import PulseCheckPanel from './PulseCheckPanel'
 
 function formatValor(n) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
@@ -45,6 +46,8 @@ export default function OpportunityDetail() {
   const [noteMode, setNoteMode] = useState(false)
   const [noteText, setNoteText] = useState('')
   const [confirmAction, setConfirmAction] = useState(null) // null | 'ganada' | 'perdida'
+  const [pulseCheckPanelOpen, setPulseCheckPanelOpen] = useState(false)
+  const [pulseCheckPanelExpanded, setPulseCheckPanelExpanded] = useState(false)
 
   const op = oportunidades.find(o => o.id === id)
 
@@ -314,7 +317,7 @@ export default function OpportunityDetail() {
 
                 {/* Abrir conversación button */}
                 <button
-                  onClick={() => navigate(`/opportunity/${op.id}/pulse-check`)}
+                  onClick={() => setPulseCheckPanelOpen(true)}
                   style={{
                     marginTop: 12,
                     display: 'flex',
@@ -403,6 +406,18 @@ export default function OpportunityDetail() {
         </div>,
         document.body
       )}
+
+      {/* Pulse Check Panel */}
+      <PulseCheckPanel
+        op={op}
+        isOpen={pulseCheckPanelOpen}
+        onClose={() => {
+          setPulseCheckPanelOpen(false)
+          setPulseCheckPanelExpanded(false)
+        }}
+        isExpanded={pulseCheckPanelExpanded}
+        onToggleExpand={() => setPulseCheckPanelExpanded(!pulseCheckPanelExpanded)}
+      />
     </div>
   )
 }

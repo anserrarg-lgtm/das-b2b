@@ -55,7 +55,7 @@ const INPUT_STYLE = {
 }
 
 const SECTION_TITLE = {
-  fontFamily: "'Cabinet Grotesk', sans-serif",
+  fontFamily: "'Satoshi', sans-serif",
   fontWeight: 700,
   fontSize: 18,
   color: '#F5F7F7',
@@ -232,6 +232,11 @@ export default function ProfilePage() {
   // Section 3
   const [canal, setCanal] = useState('email')
   const [frecuencia, setFrecuencia] = useState('14')
+  const [frecuenciaPerStatus, setFrecuenciaPerStatus] = useState({
+    sin_respuesta: '5',
+    esperando: '7',
+    respondida: '14',
+  })
   const [mensajes, setMensajes] = useState(DEFAULT_MESSAGES)
 
   // Section 4
@@ -278,7 +283,7 @@ export default function ProfilePage() {
     <div style={{ padding: '40px 40px 120px', maxWidth: 680, margin: '0 auto' }}>
 
       {/* Page header */}
-      <h1 className="font-clash" style={{ fontSize: 28, fontWeight: 700, color: '#F5F7F7', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+      <h1 style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 300, fontSize: 48, color: '#F5F7F7', margin: '0 0 6px', letterSpacing: '-0.03em', lineHeight: 1 }}>
         Perfil
       </h1>
       <p style={{ fontSize: 14, color: '#6F7876', margin: '0 0 40px', fontFamily: 'DM Sans, sans-serif' }}>
@@ -445,6 +450,113 @@ export default function ProfilePage() {
                 { value: 'personalizado', label: 'Personalizado' },
               ]}
             />
+          </div>
+
+          {/* Per-status timing */}
+          <div>
+            <p style={FIELD_LABEL}>Temporización por estado</p>
+            <p style={{ fontSize: 12, color: '#6F7876', margin: '0 0 12px', fontFamily: 'DM Sans, sans-serif' }}>
+              Personaliza la frecuencia según el estado de cada oportunidad
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {[
+                { key: 'sin_respuesta', label: 'Sin respuesta', color: '#F97316' },
+                { key: 'esperando', label: 'Esperando respuesta', color: '#7B58F8' },
+                { key: 'respondida', label: 'Respondida', color: '#B0FF92' },
+              ].map(({ key, label, color }) => (
+                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: '#F5F7F7', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>{label}</span>
+                  </div>
+                  <CustomDropdown
+                    value={frecuenciaPerStatus[key]}
+                    onChange={v => setFrecuenciaPerStatus(prev => ({ ...prev, [key]: v }))}
+                    options={[
+                      { value: '3', label: '3 días' },
+                      { value: '5', label: '5 días' },
+                      { value: '7', label: '7 días' },
+                      { value: '14', label: '14 días' },
+                      { value: '30', label: '30 días' },
+                      { value: 'nunca', label: 'Nunca' },
+                    ]}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Transition timers */}
+          <div>
+            <p style={FIELD_LABEL}>Transiciones automáticas</p>
+            <p style={{ fontSize: 12, color: '#6F7876', margin: '0 0 12px', fontFamily: 'DM Sans, sans-serif' }}>
+              Mueve automáticamente oportunidades cuando cumpla el tiempo
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Nueva → Sin respuesta */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#6F7876', flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, color: '#F5F7F7', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>Nueva → Sin respuesta</span>
+                </div>
+                <p style={{ fontSize: 12, color: '#6F7876', margin: '0 0 8px', fontFamily: 'DM Sans, sans-serif' }}>
+                  Si no envío pulse check en
+                </p>
+                <input
+                  type="number"
+                  defaultValue="3"
+                  min="1"
+                  max="30"
+                  style={{
+                    width: '100%',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 8,
+                    color: '#F5F7F7',
+                    fontSize: 13,
+                    padding: '10px 12px',
+                    fontFamily: 'DM Sans, sans-serif',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <p style={{ fontSize: 12, color: '#6F7876', margin: '6px 0 0', fontFamily: 'DM Sans, sans-serif' }}>
+                  días (mín 1, máx 30)
+                </p>
+              </div>
+
+              {/* Esperando → Sin respuesta */}
+              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#7B58F8', flexShrink: 0 }} />
+                  <span style={{ fontSize: 13, color: '#F5F7F7', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>Esperando → Sin respuesta</span>
+                </div>
+                <p style={{ fontSize: 12, color: '#6F7876', margin: '0 0 8px', fontFamily: 'DM Sans, sans-serif' }}>
+                  Si el partner no responde en
+                </p>
+                <input
+                  type="number"
+                  defaultValue="7"
+                  min="1"
+                  max="90"
+                  style={{
+                    width: '100%',
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: 8,
+                    color: '#F5F7F7',
+                    fontSize: 13,
+                    padding: '10px 12px',
+                    fontFamily: 'DM Sans, sans-serif',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <p style={{ fontSize: 12, color: '#6F7876', margin: '6px 0 0', fontFamily: 'DM Sans, sans-serif' }}>
+                  días (mín 1, máx 90)
+                </p>
+              </div>
+            </div>
           </div>
 
           {/* Message templates */}

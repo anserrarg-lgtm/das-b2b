@@ -1,22 +1,24 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Activity, Clock, AlertCircle, CheckCircle, Search, LayoutGrid, List, Upload, Download, TrendingUp, RotateCcw } from 'lucide-react'
+import { Activity, Clock, AlertCircle, CheckCircle, Search, LayoutGrid, List, Upload, Download, TrendingUp, RotateCcw, Plus, Inbox } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { ESTADOS, ESTADO_CONFIG } from '../../data/mockData'
 import OpportunityCard from './OpportunityCard'
 import { useNavigate, useLocation } from 'react-router-dom'
 
 const COLUMNS = [
-  { id: ESTADOS.SIN_RESPUESTA,   ...ESTADO_CONFIG[ESTADOS.SIN_RESPUESTA],   descripcion: 'Sin actividad en 10+ días',       icon: AlertCircle },
-  { id: ESTADOS.ESPERANDO,       ...ESTADO_CONFIG[ESTADOS.ESPERANDO],       descripcion: 'Pulse Check enviado',              icon: Clock       },
+  { id: ESTADOS.NUEVA,           ...ESTADO_CONFIG[ESTADOS.NUEVA],           descripcion: 'Nuevas oportunidades',             icon: Plus        },
   { id: ESTADOS.RESPONDIDA,      ...ESTADO_CONFIG[ESTADOS.RESPONDIDA],      descripcion: 'Partner respondió recientemente', icon: Activity    },
+  { id: ESTADOS.ESPERANDO,       ...ESTADO_CONFIG[ESTADOS.ESPERANDO],       descripcion: 'Pulse Check enviado',              icon: Clock       },
+  { id: ESTADOS.SIN_RESPUESTA,   ...ESTADO_CONFIG[ESTADOS.SIN_RESPUESTA],   descripcion: 'Sin actividad en 10+ días',       icon: AlertCircle },
   { id: ESTADOS.VENTA_CONFIRMADA,...ESTADO_CONFIG[ESTADOS.VENTA_CONFIRMADA],descripcion: 'Venta cerrada por el partner',    icon: CheckCircle },
 ]
 
-const ACTIVE_STATES = [ESTADOS.SIN_RESPUESTA, ESTADOS.ESPERANDO, ESTADOS.RESPONDIDA, ESTADOS.VENTA_CONFIRMADA]
+const ACTIVE_STATES = [ESTADOS.NUEVA, ESTADOS.RESPONDIDA, ESTADOS.ESPERANDO, ESTADOS.SIN_RESPUESTA, ESTADOS.VENTA_CONFIRMADA]
 
 const FILTER_OPTIONS = [
   { value: 'todas',                    label: 'Todas'              },
+  { value: ESTADOS.NUEVA,              label: 'Nueva'              },
   { value: ESTADOS.RESPONDIDA,         label: 'Respondida'         },
   { value: ESTADOS.ESPERANDO,          label: 'Esperando respuesta'},
   { value: ESTADOS.SIN_RESPUESTA,      label: 'Sin respuesta'      },
@@ -105,7 +107,7 @@ export default function PipelineBoard() {
           Centro de control
         </p>
         <h1 style={{
-          fontFamily: "'Geist', sans-serif",
+          fontFamily: "'Satoshi', sans-serif",
           fontSize: 56, fontWeight: 300, color: '#F5F7F7',
           margin: '8px 0 0', letterSpacing: '-0.025em', lineHeight: 1.05,
         }}>
@@ -135,8 +137,12 @@ export default function PipelineBoard() {
             Pipeline activo
           </p>
           <p style={{
-            fontSize: 12, fontWeight: 400, color: '#6F7876',
-            fontFamily: 'DM Sans, sans-serif', margin: '4px 0 0',
+            fontFamily: "'DM Sans', sans-serif",
+            fontWeight: 400,
+            fontSize: 13,
+            color: '#6F7876',
+            marginTop: 4,
+            margin: '4px 0 0 0',
           }}>
             Seguimiento en tiempo real de tus oportunidades con partners
           </p>
@@ -582,7 +588,7 @@ function MetricCard({ icon: Icon, label, value, color }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <p style={{
           fontSize: 13, color: '#6F7876', margin: 0,
-          fontFamily: 'Cabinet Grotesk, sans-serif', fontWeight: 600,
+          fontFamily: 'Satoshi, sans-serif', fontWeight: 600,
           textTransform: 'uppercase', letterSpacing: '0.06em',
         }}>
           {label}
@@ -654,7 +660,7 @@ function Column({ col, cards }) {
             {col.descripcion}
           </p>
           {cards.length > 0 && (
-            <p style={{ fontSize: 11, margin: 0, fontFamily: 'Cabinet Grotesk, sans-serif', fontWeight: 600, color: `rgba(${rgb},0.65)` }}>
+            <p style={{ fontSize: 11, margin: 0, fontFamily: 'Satoshi, sans-serif', fontWeight: 600, color: `rgba(${rgb},0.65)` }}>
               {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(totalValue)}
             </p>
           )}
@@ -766,7 +772,7 @@ function ListView({ rows, onSelect }) {
             {/* Status badge */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.color, flexShrink: 0, boxShadow: `0 0 6px ${cfg.color}` }} />
-              <span style={{ fontSize: 11, color: cfg.color, fontFamily: 'Cabinet Grotesk, sans-serif', fontWeight: 700, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, color: cfg.color, fontFamily: 'Satoshi, sans-serif', fontWeight: 700, whiteSpace: 'nowrap' }}>
                 {cfg.label}
               </span>
             </div>
@@ -831,7 +837,7 @@ function HistorialView({ rows, onSelect, onReactivar }) {
             </p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0, boxShadow: `0 0 6px ${color}` }} />
-              <span style={{ fontSize: 11, color, fontFamily: 'Cabinet Grotesk, sans-serif', fontWeight: 700, whiteSpace: 'nowrap' }}>
+              <span style={{ fontSize: 11, color, fontFamily: 'Satoshi, sans-serif', fontWeight: 700, whiteSpace: 'nowrap' }}>
                 {label}
               </span>
             </div>

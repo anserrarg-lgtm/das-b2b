@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useApp } from '../context/AppContext'
-import { AlertTriangle, AlertCircle, CheckCircle, Send, MessageCircle, Bell, RotateCcw } from 'lucide-react'
+import { AlertCircle, CheckCircle, Send, MessageCircle, Bell, RotateCcw } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const TIPO_CONFIG = {
@@ -11,22 +11,16 @@ const TIPO_CONFIG = {
     bg: 'rgba(249,115,22,0.1)',
     icon: AlertCircle,
   },
-  sin_respuesta: {
-    label: 'Sin respuesta',
-    color: '#F97316',
-    bg: 'rgba(249,115,22,0.1)',
-    icon: AlertTriangle,
-  },
   venta_confirmada: {
     label: 'Venta confirmada',
-    color: '#B0FF92',
-    bg: 'rgba(176,255,146,0.1)',
+    color: '#5FBFF9',
+    bg: 'rgba(95,191,249,0.1)',
     icon: CheckCircle,
   },
   pulse_enviado: {
     label: 'Pulse Check enviado',
-    color: '#5FBFF9',
-    bg: 'rgba(95,191,249,0.1)',
+    color: '#7B58F8',
+    bg: 'rgba(123,88,248,0.1)',
     icon: Send,
   },
   partner_respondio: {
@@ -40,11 +34,12 @@ const TIPO_CONFIG = {
 const KNOWN_TYPES = Object.keys(TIPO_CONFIG)
 
 const FILTER_TABS = [
-  { key: 'todas',               label: 'Todas'              },
-  { key: 'respuesta_historial', label: 'Requiere atención'  },
-  { key: 'sin_respuesta',       label: 'Sin respuesta'      },
-  { key: 'venta_confirmada',    label: 'Venta confirmada'   },
-  { key: 'pulse_enviado',       label: 'Pulse enviado'      },
+  { key: 'todas',              label: 'Todas'              },
+  { key: 'no_leidas',          label: 'Sin leer'           },
+  { key: 'pulse_enviado',      label: 'Pulse enviado'      },
+  { key: 'partner_respondio',  label: 'Partner respondió'  },
+  { key: 'venta_confirmada',   label: 'Venta confirmada'   },
+  { key: 'respuesta_historial', label: 'Historial'         },
 ]
 
 function timeAgo(dateStr) {
@@ -75,7 +70,9 @@ export default function NotificationCenter() {
 
   const filtered = activeFilter === 'todas'
     ? sorted
-    : sorted.filter(n => n.tipo === activeFilter)
+    : activeFilter === 'no_leidas'
+      ? sorted.filter(n => !n.leida)
+      : sorted.filter(n => n.tipo === activeFilter)
 
   const attentionNotifs = filtered.filter(n => n.tipo === 'respuesta_historial')
   const regularNotifs   = filtered.filter(n => n.tipo !== 'respuesta_historial')
@@ -312,7 +309,7 @@ export default function NotificationCenter() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <div>
-          <h1 className="font-clash" style={{ fontSize: 48, fontWeight: 700, color: '#F5F7F7', margin: '0 0 8px', letterSpacing: '-0.03em', lineHeight: 1 }}>
+          <h1 style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 300, fontSize: 48, color: '#F5F7F7', margin: '0 0 8px', letterSpacing: '-0.03em', lineHeight: 1 }}>
             Notificaciones
           </h1>
           <p style={{ fontSize: 14, color: '#A3AEAC', margin: '0 0 24px', fontFamily: 'DM Sans, sans-serif' }}>
@@ -360,7 +357,6 @@ export default function NotificationCenter() {
         }}>
           {FILTER_TABS.map(tab => {
             const isActive = activeFilter === tab.key
-            const isAttention = tab.key === 'respuesta_historial'
             return (
               <button
                 key={tab.key}
@@ -369,12 +365,8 @@ export default function NotificationCenter() {
                   padding: '6px 16px',
                   borderRadius: 6,
                   border: 'none',
-                  background: isActive
-                    ? (isAttention ? 'rgba(249,115,22,0.2)' : 'rgba(255,255,255,0.12)')
-                    : 'transparent',
-                  color: isActive
-                    ? (isAttention ? '#F97316' : '#F5F7F7')
-                    : '#A3AEAC',
+                  background: isActive ? 'rgba(255,255,255,0.12)' : 'transparent',
+                  color: isActive ? '#F5F7F7' : '#A3AEAC',
                   fontSize: 13,
                   fontWeight: 500,
                   cursor: 'pointer',
@@ -384,8 +376,8 @@ export default function NotificationCenter() {
                 }}
                 onMouseEnter={e => {
                   if (!isActive) {
-                    e.currentTarget.style.background = isAttention ? 'rgba(249,115,22,0.1)' : 'rgba(255,255,255,0.08)'
-                    e.currentTarget.style.color = isAttention ? '#F97316' : '#F5F7F7'
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+                    e.currentTarget.style.color = '#F5F7F7'
                   }
                 }}
                 onMouseLeave={e => {
