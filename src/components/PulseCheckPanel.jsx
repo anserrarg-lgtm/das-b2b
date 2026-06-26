@@ -178,74 +178,76 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
           padding: '10px 14px',
           borderBottom: '1px solid rgba(255,255,255,0.06)',
           background: 'rgba(18,23,22,0.5)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
           flexShrink: 0,
+          minHeight: '40px',
         }}
       >
-        {/* Action Buttons (always visible) */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={onToggleExpand}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 6,
-              background: 'rgba(255,255,255,0.04)',
-              border: 'none',
-              color: '#6F7876',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.15s',
-              flexShrink: 0,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-              e.currentTarget.style.color = '#F5F7F7'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-              e.currentTarget.style.color = '#6F7876'
-            }}
-          >
-            {isExpanded ? <Minimize2 size={16} strokeWidth={1.5} /> : <Maximize2 size={16} strokeWidth={1.5} />}
-          </button>
-          <button
-            onClick={onClose}
-            style={{
-              width: 28,
-              height: 28,
-              borderRadius: 6,
-              background: 'rgba(255,255,255,0.04)',
-              border: 'none',
-              color: '#6F7876',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'all 0.15s',
-              flexShrink: 0,
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-              e.currentTarget.style.color = '#F5F7F7'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-              e.currentTarget.style.color = '#6F7876'
-            }}
-          >
-            <ChevronRight size={16} strokeWidth={1.5} />
-          </button>
-        </div>
+        {/* Collapsed State: Action Buttons */}
+        {!isExpanded && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={onClose}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.04)',
+                border: 'none',
+                color: '#6F7876',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+                e.currentTarget.style.color = '#F5F7F7'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                e.currentTarget.style.color = '#6F7876'
+              }}
+            >
+              <ChevronRight size={16} strokeWidth={1.5} />
+            </button>
+            <button
+              onClick={onToggleExpand}
+              style={{
+                width: 28,
+                height: 28,
+                borderRadius: 6,
+                background: 'rgba(255,255,255,0.04)',
+                border: 'none',
+                color: '#6F7876',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+                e.currentTarget.style.color = '#F5F7F7'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                e.currentTarget.style.color = '#6F7876'
+              }}
+            >
+              <Maximize2 size={16} strokeWidth={1.5} />
+            </button>
+          </div>
+        )}
 
-        {/* Breadcrumb (only visible when expanded) */}
+        {/* Expanded State: Breadcrumb */}
         {isExpanded && (
           <div
             style={{
@@ -275,7 +277,9 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
             </button>
             <span>·</span>
             <button
-              onClick={onClose}
+              onClick={() => {
+                onToggleExpand()
+              }}
               style={{
                 background: 'none',
                 border: 'none',
