@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Clock, XCircle, User, Zap, Send, Mail, MessageCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Clock, XCircle, User, Zap, Send, Mail, MessageCircle, ToggleRight, ToggleLeft } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { ESTADO_CONFIG } from '../data/mockData'
 import { useEffect, useRef, useState } from 'react'
@@ -131,16 +131,29 @@ export default function PulseCheckPage() {
   const [channel, setChannel] = useState('email')
 
   const op = oportunidades.find(o => o.id === id)
+  const textareaRef = useRef(null)
 
   const suggestedMessage = SUGGESTED_MESSAGES[op?.estado] || SUGGESTED_MESSAGES.default
   const displayMessage = useDefault ? suggestedMessage : messageText
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
+  const handleToggleDefault = () => {
     if (useDefault) {
+      // Turning OFF - clear textarea and focus
+      setMessageText('')
+      setUseDefault(false)
+      setTimeout(() => {
+        textareaRef.current?.focus()
+      }, 0)
+    } else {
+      // Turning ON - restore suggested message
       setMessageText(suggestedMessage)
+      setUseDefault(true)
     }
-  }, [useDefault, suggestedMessage])
+  }
 
   if (!op) {
     return (
@@ -494,9 +507,9 @@ export default function PulseCheckPage() {
 
         {/* Row 2 — Message textarea */}
         <textarea
+          ref={textareaRef}
           value={useDefault ? suggestedMessage : messageText}
-          onChange={e => !useDefault && setMessageText(e.target.value)}
-          readOnly={useDefault}
+          onChange={e => setMessageText(e.target.value)}
           placeholder="Escribe tu mensaje al partner..."
           style={{
             width: '100%',
@@ -517,7 +530,9 @@ export default function PulseCheckPage() {
             marginBottom: 12,
             lineHeight: 1.5,
             opacity: useDefault ? 0.7 : 1,
+            cursor: useDefault ? 'default' : 'text',
           }}
+          readOnly={useDefault}
           onFocus={e => {
             e.target.style.borderColor = 'rgba(176,255,146,0.15)'
           }}
@@ -532,27 +547,40 @@ export default function PulseCheckPage() {
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          <label style={{
+          <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
-            cursor: 'pointer',
-            fontSize: 12,
-            color: '#A3AEAC',
-            fontFamily: 'DM Sans, sans-serif',
-            userSelect: 'none',
+            gap: 12,
           }}>
-            <input
-              type="checkbox"
-              checked={!useDefault}
-              onChange={e => setUseDefault(!e.target.checked)}
+            <p style={{
+              fontSize: 13,
+              color: '#A3AEAC',
+              margin: 0,
+              fontFamily: 'DM Sans, sans-serif',
+              fontWeight: 500,
+            }}>
+              Usar mensaje predeterminado
+            </p>
+            <button
+              onClick={handleToggleDefault}
               style={{
+                background: 'none',
+                border: 'none',
                 cursor: 'pointer',
-                accentColor: '#B0FF92',
+                padding: 0,
+                flexShrink: 0,
+                display: 'flex',
+                alignItems: 'center',
+                transition: 'opacity 0.15s',
               }}
-            />
-            No usar mensaje predeterminado
-          </label>
+              onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
+              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+            >
+              {useDefault
+                ? <ToggleRight size={32} color="#B0FF92" strokeWidth={1.5} />
+                : <ToggleLeft size={32} color="#6F7876" strokeWidth={1.5} />}
+            </button>
+          </div>
 
           <button
             onClick={() => setShowConfirmModal(true)}
