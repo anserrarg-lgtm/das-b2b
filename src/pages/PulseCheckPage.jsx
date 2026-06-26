@@ -1,8 +1,9 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Clock, XCircle, User, Zap } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Clock, XCircle, User, Zap, Send, Mail, MessageCircle } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { ESTADO_CONFIG } from '../data/mockData'
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 const MOCK_MESSAGES = [
   {
@@ -109,17 +110,37 @@ function formatTime(timestamp) {
   return date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })
 }
 
+const SUGGESTED_MESSAGES = {
+  respondida: '¿Cómo avanza la implementación? Queremos asegurarnos de que todo va según lo planeado.',
+  esperando: 'Te escribo para hacer seguimiento a la propuesta que enviamos. ¿Hay novedades?',
+  sin_respuesta: 'No hemos tenido actualizaciones recientemente. ¿Podrías confirmar el estado actual?',
+  nueva: '¿Cuándo podemos agendar una llamada para discutir los detalles?',
+  venta_confirmada: 'Felicidades por cerrar el deal. Vamos a coordinar los próximos pasos.',
+  default: '¿Cómo va todo? ¿Hay algo en lo que podamos ayudarte?',
+}
+
 export default function PulseCheckPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { oportunidades } = useApp()
   const messagesEndRef = useRef(null)
+  const [messageText, setMessageText] = useState('')
+  const [useDefault, setUseDefault] = useState(true)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [waitDays, setWaitDays] = useState('7')
+  const [channel, setChannel] = useState('email')
 
   const op = oportunidades.find(o => o.id === id)
 
+  const suggestedMessage = SUGGESTED_MESSAGES[op?.estado] || SUGGESTED_MESSAGES.default
+  const displayMessage = useDefault ? suggestedMessage : messageText
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [])
+    if (useDefault) {
+      setMessageText(suggestedMessage)
+    }
+  }, [useDefault, suggestedMessage])
 
   if (!op) {
     return (
@@ -225,6 +246,7 @@ export default function PulseCheckPage() {
         display: 'flex',
         flexDirection: 'column',
         gap: 24,
+        paddingBottom: '320px',
       }}>
         {sortedDates.map(dateStr => (
           <div key={dateStr}>
@@ -393,6 +415,344 @@ export default function PulseCheckPage() {
         ))}
         <div ref={messagesEndRef} />
       </div>
+
+      {/* Input Area (fixed at bottom) */}
+      <div style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 240,
+        right: 0,
+        background: '#121716',
+        borderTop: '1px solid rgba(255,255,255,0.06)',
+        padding: '16px 24px',
+        zIndex: 100,
+      }}>
+        {/* Row 1 — Channel selector */}
+        <div style={{ marginBottom: 14, display: 'flex', alignItems: 'center', gap: 16 }}>
+          <p style={{ fontSize: 12, color: '#6F7876', margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
+            Enviar por:
+          </p>
+          <button
+            onClick={() => setChannel('email')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 12px',
+              background: channel === 'email' ? 'rgba(176,255,146,0.12)' : 'rgba(255,255,255,0.04)',
+              border: `1px solid ${channel === 'email' ? 'rgba(176,255,146,0.25)' : 'rgba(255,255,255,0.1)'}`,
+              borderRadius: 8,
+              color: channel === 'email' ? '#B0FF92' : '#A3AEAC',
+              fontSize: 13,
+              cursor: 'pointer',
+              fontFamily: 'DM Sans, sans-serif',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => {
+              if (channel !== 'email') {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'
+              }
+            }}
+            onMouseLeave={e => {
+              if (channel !== 'email') {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
+              }
+            }}
+          >
+            <Mail size={14} strokeWidth={1.5} />
+            {op.partner}@example.com
+          </button>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 10px',
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 8,
+            opacity: 0.5,
+            cursor: 'not-allowed',
+          }}>
+            <MessageCircle size={14} strokeWidth={1.5} color="#6F7876" />
+            <span style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif' }}>
+              WhatsApp
+            </span>
+            <span style={{
+              fontSize: 10,
+              background: 'rgba(255,255,255,0.08)',
+              padding: '2px 6px',
+              borderRadius: 4,
+              color: '#6F7876',
+              fontFamily: 'DM Sans, sans-serif',
+            }}>
+              Próximamente
+            </span>
+          </div>
+        </div>
+
+        {/* Row 2 — Message textarea */}
+        <textarea
+          value={useDefault ? suggestedMessage : messageText}
+          onChange={e => !useDefault && setMessageText(e.target.value)}
+          readOnly={useDefault}
+          placeholder="Escribe tu mensaje al partner..."
+          style={{
+            width: '100%',
+            minHeight: 60,
+            maxHeight: 150,
+            background: 'rgba(255,255,255,0.04)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 8,
+            color: '#F5F7F7',
+            fontSize: 13,
+            padding: '12px 14px',
+            fontFamily: 'DM Sans, sans-serif',
+            outline: 'none',
+            resize: 'vertical',
+            boxSizing: 'border-box',
+            marginBottom: 12,
+            lineHeight: 1.5,
+            opacity: useDefault ? 0.7 : 1,
+          }}
+          onFocus={e => {
+            e.target.style.borderColor = 'rgba(176,255,146,0.15)'
+          }}
+          onBlur={e => {
+            e.target.style.borderColor = 'rgba(255,255,255,0.06)'
+          }}
+        />
+
+        {/* Row 3 — Bottom actions */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <label style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+            fontSize: 12,
+            color: '#A3AEAC',
+            fontFamily: 'DM Sans, sans-serif',
+            userSelect: 'none',
+          }}>
+            <input
+              type="checkbox"
+              checked={!useDefault}
+              onChange={e => setUseDefault(!e.target.checked)}
+              style={{
+                cursor: 'pointer',
+                accentColor: '#B0FF92',
+              }}
+            />
+            No usar mensaje predeterminado
+          </label>
+
+          <button
+            onClick={() => setShowConfirmModal(true)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '10px 16px',
+              background: '#B0FF92',
+              border: 'none',
+              borderRadius: 8,
+              color: '#121716',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
+              fontFamily: 'DM Sans, sans-serif',
+              transition: 'opacity 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
+            onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+          >
+            <Send size={14} strokeWidth={2} />
+            Enviar Pulse Check
+          </button>
+        </div>
+      </div>
+
+      {/* Send Confirmation Modal */}
+      {showConfirmModal && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(0,0,0,0.75)',
+            zIndex: 99999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={() => setShowConfirmModal(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: 440,
+              background: 'rgba(18,23,22,0.97)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: 12,
+              padding: 28,
+              backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)',
+            }}
+          >
+            {/* Title */}
+            <h2 style={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: '#F5F7F7',
+              margin: 0,
+              fontFamily: 'Satoshi, sans-serif',
+            }}>
+              ¿Cuánto tiempo esperas respuesta?
+            </h2>
+
+            {/* Subtitle */}
+            <p style={{
+              fontSize: 13,
+              color: '#6F7876',
+              margin: '8px 0 20px',
+              fontFamily: 'DM Sans, sans-serif',
+              lineHeight: 1.6,
+            }}>
+              Si el partner no responde en este tiempo, la oportunidad pasará a Sin respuesta
+            </p>
+
+            {/* Number input row */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 12,
+            }}>
+              <p style={{
+                fontSize: 14,
+                color: '#A3AEAC',
+                margin: 0,
+                fontFamily: 'DM Sans, sans-serif',
+              }}>
+                Esperar
+              </p>
+              <input
+                type="number"
+                value={waitDays}
+                onChange={e => {
+                  const val = Math.max(1, Math.min(90, parseInt(e.target.value) || 1))
+                  setWaitDays(String(val))
+                }}
+                min="1"
+                max="90"
+                style={{
+                  width: 64,
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 14,
+                  padding: '8px 10px',
+                  fontFamily: 'DM Sans, sans-serif',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                  textAlign: 'center',
+                }}
+                onFocus={e => e.target.style.borderColor = 'rgba(176,255,146,0.25)'}
+                onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+              />
+              <p style={{
+                fontSize: 14,
+                color: '#A3AEAC',
+                margin: 0,
+                fontFamily: 'DM Sans, sans-serif',
+              }}>
+                días antes de marcar como Sin respuesta
+              </p>
+            </div>
+
+            {/* Calculated date */}
+            <p style={{
+              fontSize: 12,
+              color: '#6F7876',
+              margin: '0 0 24px',
+              fontFamily: 'DM Sans, sans-serif',
+            }}>
+              Sin respuesta a partir del: <span style={{ fontWeight: 600, color: '#A3AEAC' }}>
+                {(() => {
+                  const d = new Date()
+                  d.setDate(d.getDate() + parseInt(waitDays))
+                  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
+                })()}
+              </span>
+            </p>
+
+            {/* Buttons */}
+            <div style={{
+              display: 'flex',
+              gap: 12,
+              justifyContent: 'flex-end',
+            }}>
+              <button
+                onClick={() => setShowConfirmModal(false)}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: 8,
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  background: 'transparent',
+                  color: '#A3AEAC',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.color = '#F5F7F7'
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.color = '#A3AEAC'
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
+                }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setShowConfirmModal(false)
+                }}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: 8,
+                  border: 'none',
+                  background: '#B0FF92',
+                  color: '#121716',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  fontFamily: 'DM Sans, sans-serif',
+                  cursor: 'pointer',
+                  transition: 'opacity 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = '0.88'}
+                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+              >
+                Enviar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
