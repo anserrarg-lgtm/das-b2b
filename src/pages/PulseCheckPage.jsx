@@ -1,9 +1,97 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Clock, XCircle, User, Zap, Send, Mail, MessageCircle, ToggleRight, ToggleLeft } from 'lucide-react'
+import { ArrowLeft, CheckCircle, Clock, XCircle, User, Zap, Send, Mail, MessageCircle, ToggleRight, ToggleLeft, Sparkles } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { ESTADO_CONFIG } from '../data/mockData'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+
+// Get state-specific context for message generation
+const getStateContext = (status, daysSinceActivity) => {
+  switch(status) {
+    case 'nueva':
+      return `Esta es la primera vez que contactamos al partner sobre esta oportunidad. El mensaje debe presentar la oportunidad y solicitar confirmación de que la trabajará.`;
+
+    case 'esperando':
+      return `Ya enviamos un pulse check y el partner no ha respondido en ${daysSinceActivity} días. El mensaje debe ser un recordatorio cordial sin sonar repetitivo al anterior.`;
+
+    case 'sin_respuesta':
+      return `El partner lleva ${daysSinceActivity} días sin responder. El mensaje debe ser más directo y preguntar específicamente si hay algún bloqueo o si la oportunidad sigue activa.`;
+
+    case 'respondida':
+      return `El partner respondió recientemente. El mensaje debe dar seguimiento a lo que respondió y preguntar cómo avanza el proceso con el cliente.`;
+
+    case 'venta_confirmada':
+      return `El partner confirmó que la venta se cerró pero no dio detalles. El mensaje debe solicitar específicamente: producto vendido, cantidad de licencias y fecha de cierre para poder registrar la atribución correctamente.`;
+
+    default:
+      return `Genera un mensaje de seguimiento apropiado para el estado actual.`;
+  }
+};
+
+// AI Message Generation Function
+const generatePulseCheckMessage = async (opportunity) => {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY
+  if (!apiKey) {
+    console.error('ANTHROPIC_API_KEY not configured')
+    return null
+  }
+
+  try {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        system: `Eres un asistente especializado en ventas indirectas B2B para Channel Account Managers. Tu único objetivo es ayudar a mantener visibilidad y avanzar oportunidades de venta que están en manos de partners distribuidores.
+
+Siempre actúas en pro de:
+1. Confirmar si la venta se concretó
+2. Obtener detalles de la venta (producto, cantidad, fecha)
+3. Identificar y desbloquear obstáculos en el proceso
+4. Mantener la comunicación activa con el partner
+
+Nunca:
+- Presionas de forma agresiva
+- Haces promesas de precio o condiciones
+- Mencionas a la competencia
+- Envías mensajes de más de 3 oraciones
+- Repites exactamente el mismo mensaje dos veces seguidas
+- Usas lenguaje informal
+- Revelas información confidencial del CAM o la empresa`,
+        messages: [{
+          role: 'user',
+          content: `Genera un mensaje de pulse check para esta oportunidad de venta:
+
+Partner: ${opportunity.partnerName || 'Partner'}
+Cliente: ${opportunity.clientName || 'Cliente'}
+Estado actual: ${opportunity.status || 'En revisión'}
+Días sin actividad: ${opportunity.daysSinceActivity || 0}
+Valor del deal: ${opportunity.value || 'N/A'}
+Historial de mensajes anteriores: ${opportunity.lastMessage || 'Primer contacto'}
+
+Contexto específico del estado: ${getStateContext(opportunity.status, opportunity.daysSinceActivity)}
+
+Responde SOLO con el mensaje en español, sin explicaciones adicionales.`
+        }]
+      })
+    })
+
+    if (!response.ok) {
+      console.error('API error:', response.status)
+      return null
+    }
+
+    const data = await response.json()
+    return data.content[0].text
+  } catch (error) {
+    console.error('Error generating message:', error)
+    return null
+  }
+}
 
 const MOCK_MESSAGES = [
   {
@@ -129,16 +217,43 @@ export default function PulseCheckPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [waitDays, setWaitDays] = useState('7')
   const [channel, setChannel] = useState('email')
+  const [aiMessage, setAiMessage] = useState('')
+  const [loadingAi, setLoadingAi] = useState(false)
+  const [useAiMessage, setUseAiMessage] = useState(true)
 
   const op = oportunidades.find(o => o.id === id)
   const textareaRef = useRef(null)
 
   const suggestedMessage = SUGGESTED_MESSAGES[op?.estado] || SUGGESTED_MESSAGES.default
-  const displayMessage = useDefault ? suggestedMessage : messageText
+  const displayMessage = useAiMessage && aiMessage ? aiMessage : (useDefault ? suggestedMessage : messageText)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
+
+  // Generate AI message when component loads
+  useEffect(() => {
+    const generateMessage = async () => {
+      if (!op) return
+
+      setLoadingAi(true)
+      const generated = await generatePulseCheckMessage({
+        partnerName: op.partner?.nombre || 'Partner',
+        clientName: op.cliente || 'Cliente',
+        status: op.estado,
+        daysSinceActivity: 5,
+        value: op.monto || 0,
+      })
+
+      if (generated) {
+        setAiMessage(generated)
+        setUseAiMessage(true)
+      }
+      setLoadingAi(false)
+    }
+
+    generateMessage()
+  }, [op?.id])
 
   const handleToggleDefault = () => {
     if (useDefault) {
@@ -203,7 +318,7 @@ export default function PulseCheckPage() {
           onMouseLeave={e => e.currentTarget.style.color = '#A3AEAC'}
         >
           <ArrowLeft size={15} strokeWidth={1.5} />
-          {op.nombre}
+          {op.cliente}
         </button>
 
         <div style={{ marginBottom: 6 }}>
@@ -226,7 +341,7 @@ export default function PulseCheckPage() {
           color: '#6F7876',
           fontFamily: 'DM Sans, sans-serif',
         }}>
-          {op.nombre}
+          {op.cliente}
           <span>·</span>
           <div style={{
             display: 'inline-flex',
@@ -505,82 +620,96 @@ export default function PulseCheckPage() {
           </div>
         </div>
 
-        {/* Row 2 — Message textarea */}
-        <textarea
-          ref={textareaRef}
-          value={useDefault ? suggestedMessage : messageText}
-          onChange={e => setMessageText(e.target.value)}
-          placeholder="Escribe tu mensaje al partner..."
-          style={{
-            width: '100%',
-            minHeight: 60,
-            maxHeight: 150,
-            background: 'rgba(255,255,255,0.04)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            border: '1px solid rgba(255,255,255,0.06)',
-            borderRadius: 8,
-            color: '#F5F7F7',
-            fontSize: 13,
-            padding: '12px 14px',
-            fontFamily: 'DM Sans, sans-serif',
-            outline: 'none',
-            resize: 'vertical',
-            boxSizing: 'border-box',
-            marginBottom: 12,
-            lineHeight: 1.5,
-            opacity: useDefault ? 0.7 : 1,
-            cursor: useDefault ? 'default' : 'text',
-          }}
-          readOnly={useDefault}
-          onFocus={e => {
-            e.target.style.borderColor = 'rgba(176,255,146,0.15)'
-          }}
-          onBlur={e => {
-            e.target.style.borderColor = 'rgba(255,255,255,0.06)'
-          }}
-        />
+        {/* Row 2 — AI Message textarea */}
+        <div style={{ marginBottom: 12, position: 'relative' }}>
+          <textarea
+            ref={textareaRef}
+            value={displayMessage}
+            onChange={e => {
+              if (!useAiMessage) setMessageText(e.target.value)
+            }}
+            placeholder={loadingAi ? 'Generando mensaje con IA...' : 'Escribe tu mensaje al partner...'}
+            style={{
+              width: '100%',
+              minHeight: 60,
+              maxHeight: 150,
+              background: 'rgba(255,255,255,0.04)',
+              backdropFilter: 'blur(24px)',
+              WebkitBackdropFilter: 'blur(24px)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 8,
+              color: '#F5F7F7',
+              fontSize: 13,
+              padding: '12px 14px',
+              fontFamily: 'DM Sans, sans-serif',
+              outline: 'none',
+              resize: 'vertical',
+              boxSizing: 'border-box',
+              lineHeight: 1.5,
+              opacity: loadingAi ? 0.5 : 1,
+              cursor: loadingAi ? 'wait' : 'text',
+              minHeight: 72,
+            }}
+            readOnly={loadingAi || useAiMessage}
+            onFocus={e => {
+              if (!loadingAi && !useAiMessage) {
+                e.currentTarget.style.borderColor = 'rgba(176,255,146,0.15)'
+              }
+            }}
+            onBlur={e => {
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'
+            }}
+          />
 
-        {/* Row 3 — Bottom actions */}
+          {/* AI Badge */}
+          {aiMessage && useAiMessage && !loadingAi && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 6, fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif' }}>
+              <Sparkles size={12} color="#B0FF92" strokeWidth={2} />
+              Generado con IA
+            </div>
+          )}
+        </div>
+
+        {/* Toggle: Use manual message instead */}
+        {aiMessage && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+            <button
+              onClick={() => setUseAiMessage(!useAiMessage)}
+              style={{
+                padding: '6px 10px',
+                background: useAiMessage ? 'transparent' : 'rgba(176,255,146,0.12)',
+                border: `1px solid ${useAiMessage ? 'rgba(255,255,255,0.1)' : 'rgba(176,255,146,0.25)'}`,
+                borderRadius: 6,
+                color: useAiMessage ? '#A3AEAC' : '#B0FF92',
+                fontSize: 12,
+                fontFamily: 'DM Sans, sans-serif',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => {
+                if (useAiMessage) {
+                  e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'
+                }
+              }}
+              onMouseLeave={e => {
+                if (useAiMessage) {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
+                }
+              }}
+            >
+              {useAiMessage ? 'Usar mensaje manual' : 'Usando mensaje manual'}
+            </button>
+          </div>
+        )}
+
+        {/* Row 3 — Send button */}
         <div style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
         }}>
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-          }}>
-            <p style={{
-              fontSize: 13,
-              color: '#A3AEAC',
-              margin: 0,
-              fontFamily: 'DM Sans, sans-serif',
-              fontWeight: 500,
-            }}>
-              Usar mensaje predeterminado
-            </p>
-            <button
-              onClick={handleToggleDefault}
-              style={{
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                padding: 0,
-                flexShrink: 0,
-                display: 'flex',
-                alignItems: 'center',
-                transition: 'opacity 0.15s',
-              }}
-              onMouseEnter={e => e.currentTarget.style.opacity = '0.8'}
-              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-            >
-              {useDefault
-                ? <ToggleRight size={32} color="#B0FF92" strokeWidth={1.5} />
-                : <ToggleLeft size={32} color="#6F7876" strokeWidth={1.5} />}
-            </button>
-          </div>
 
           <button
             onClick={() => setShowConfirmModal(true)}

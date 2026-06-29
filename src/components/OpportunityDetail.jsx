@@ -1,10 +1,11 @@
-import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Send, StickyNote, ToggleLeft, ToggleRight, CheckCircle2, CheckCircle, MessageSquare, Clock, Plus, XCircle, MessageCircle, ChevronDown } from 'lucide-react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
+import { ArrowLeft, Send, StickyNote, ToggleLeft, ToggleRight, CheckCircle2, CheckCircle, MessageSquare, Clock, Plus, XCircle, MessageCircle, ChevronDown, ChevronLeft, ChevronRight, Maximize2, PauseCircle, Settings2, Sparkles, Mail } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { ESTADO_CONFIG } from '../data/mockData'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import PulseCheckPanel from './PulseCheckPanel'
+import Toggle from './Toggle'
 
 function formatValor(n) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
@@ -13,6 +14,13 @@ function formatValor(n) {
 function formatFechaLarga(str) {
   const d = new Date(str + 'T00:00:00')
   return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—'
+  const parts = dateStr.split('-')
+  const date = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]))
+  return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
 const TIPO_ICONS = {
@@ -34,22 +42,114 @@ const TIPO_COLORS = {
 }
 
 const PULSE_ESTADO_CONFIG = {
-  'Enviado': { color: '#F5B942', bg: 'rgba(245,185,66,0.1)', border: 'rgba(245,185,66,0.2)' },
-  'Abierto': { color: '#5FBFF9', bg: 'rgba(95,191,249,0.1)', border: 'rgba(95,191,249,0.2)' },
+  'Enviado': { color: '#A3AEAC', bg: 'rgba(255,255,255,0.06)', border: 'rgba(255,255,255,0.1)' },
+  'Abierto': { color: '#A3AEAC', bg: 'rgba(255,255,255,0.06)', border: 'rgba(255,255,255,0.1)' },
   'Respondido': { color: '#B0FF92', bg: 'rgba(176,255,146,0.1)', border: 'rgba(176,255,146,0.2)' },
+}
+
+function getDefaultMessage(op) {
+  const lastPulse = op?.pulseChecks?.[op.pulseChecks.length - 1]
+  const lastResponse = lastPulse?.partnerResponse?.text || lastPulse?.partnerResponse?.type || ''
+
+  if (op?.estado === 'venta_confirmada') {
+    return `Hola, gracias por confirmar la venta con ${op?.cliente}. Para registrar correctamente la atribución necesitamos los detalles: ¿qué producto se vendió, cuántas licencias y cuál fue la fecha de cierre?`
+  }
+
+  if (op?.estado === 'respondida') {
+    if (lastResponse.includes('22 de junio') || lastResponse.includes('firma') || lastResponse.includes('orden de compra') || lastResponse.includes('listo')) {
+      return `Perfecto, estaremos pendientes para esa fecha. Cualquier novedad nos avisas, estamos para apoyarte.`
+    }
+    if (lastResponse.includes('negociación') || lastResponse.includes('propuesta') || lastResponse.includes('ajustando') || lastResponse.includes('revisión')) {
+      return `Entendido, ¿hay algo en lo que podamos apoyarte para avanzar con ${op?.cliente}?`
+    }
+    if (lastResponse.includes('interesado') || lastResponse.includes('demo') || lastResponse.includes('evaluando') || lastResponse.includes('aprobó')) {
+      return `Excelente, ¿cuándo estiman tomar la decisión final? Queremos asegurarnos de tener todo listo.`
+    }
+    return `Hola, ¿cómo va el proceso con ${op?.cliente}? ¿Hay alguna novedad que podamos registrar?`
+  }
+
+  if (op?.estado === 'sin_respuesta') {
+    return `Hola, llevamos un tiempo sin noticias sobre ${op?.cliente}. ¿Sigue activa esta oportunidad? Nos interesa saber si hay algo que esté bloqueando el proceso.`
+  }
+
+  if (op?.estado === 'esperando') {
+    return `Hola, retomamos el contacto sobre ${op?.cliente}. ¿Pudiste avanzar con ellos?`
+  }
+
+  return `Hola, ¿cómo va el proceso con ${op?.cliente}?`
 }
 
 export default function OpportunityDetail({ isSidebarCollapsed = false }) {
   const { id } = useParams()
-  const { oportunidades, toggleAutomatico, enviarPulseCheck, agregarNota, cerrarComoGanada, cerrarComoPerdida } = useApp()
+  const { oportunidades, toggleAutomatico, enviarPulseCheck, agregarNota, cerrarComoGanada, cerrarComoPerdida, cambiarEstado } = useApp()
   const navigate = useNavigate()
+  const location = useLocation()
+  const fromNuevas = location.state?.from === 'nuevas'
   const [noteMode, setNoteMode] = useState(false)
   const [noteText, setNoteText] = useState('')
   const [confirmAction, setConfirmAction] = useState(null) // null | 'ganada' | 'perdida'
   const [pulseCheckPanelOpen, setPulseCheckPanelOpen] = useState(false)
   const [pulseCheckPanelExpanded, setPulseCheckPanelExpanded] = useState(false)
+  const [showAutomationModal, setShowAutomationModal] = useState(false)
+  const [showPulseChat, setShowPulseChat] = useState(false)
+  const [isClosing, setIsClosing] = useState(false)
+  const [automationEnabled, setAutomationEnabled] = useState(true)
+  const [automationFrequency, setAutomationFrequency] = useState('7')
+  const [automationResponseWindow, setAutomationResponseWindow] = useState('7')
+  const [showPauseModal, setShowPauseModal] = useState(false)
+  const [pauseDate, setPauseDate] = useState('')
+  const [pauseReason, setPauseReason] = useState('')
+  const [pauseSendPulse, setPauseSendPulse] = useState(true)
+  const [pauseMessage, setPauseMessage] = useState('Hola [nombre], retomamos el contacto sobre [cliente]. ¿Pudiste avanzar con ellos? Estamos listos para apoyarte en lo que necesites.')
+  const [selectedMessageId, setSelectedMessageId] = useState(null)
+  const [usarPredeterminado, setUsarPredeterminado] = useState(true)
+  const [mensajeChat, setMensajeChat] = useState('')
+  const [chatVisible, setChatVisible] = useState(false)
+  const messagesEndRef = useRef(null)
+  const messagesBottomRef = useRef(null)
+
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [])
+
+  useEffect(() => {
+    const mainContent = document.querySelector('main') ||
+                        document.querySelector('.main-content') ||
+                        document.getElementById('main-content')
+    if (mainContent) mainContent.scrollTop = 0
+  }, [])
+
+  useEffect(() => {
+    if (location.state?.openPulseChat) {
+      const timer = setTimeout(() => {
+        setShowPulseChat(true)
+      }, 300)
+      return () => clearTimeout(timer)
+    }
+  }, [location.state])
+
+  useEffect(() => {
+    const container = document.querySelector('.opportunity-detail-container')
+    if (container) container.scrollTop = 0
+    window.scrollTo({ top: 0, behavior: 'instant' })
+  }, [id])
+
+  useEffect(() => {
+    if (showPulseChat && messagesBottomRef.current) {
+      setChatVisible(false)
+      const delay = location.state?.openPulseChat ? 400 : 150
+      setTimeout(() => {
+        messagesBottomRef.current?.scrollIntoView({ behavior: 'instant' })
+        setTimeout(() => setChatVisible(true), 50)
+      }, delay)
+    } else {
+      setChatVisible(false)
+    }
+  }, [showPulseChat, id])
 
   const op = oportunidades.find(o => o.id === id)
+
+  console.log('pulseChecks:', op?.pulseChecks, 'count:', op?.pulseChecks?.length || 0)
 
   if (!op) {
     return (
@@ -64,6 +164,36 @@ export default function OpportunityDetail({ isSidebarCollapsed = false }) {
 
   const config = ESTADO_CONFIG[op.estado]
 
+  const handleCloseChat = () => {
+    setIsClosing(true)
+    setTimeout(() => {
+      setShowPulseChat(false)
+      setIsClosing(false)
+    }, 500)
+  }
+
+  const formatChatDate = (dateStr) => {
+    if (!dateStr) return ''
+    try {
+      const parts = dateStr.split('-')
+      if (parts.length === 3) {
+        const date = new Date(
+          parseInt(parts[0]),
+          parseInt(parts[1]) - 1,
+          parseInt(parts[2])
+        )
+        return date.toLocaleDateString('es-CO', {
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric'
+        })
+      }
+      return dateStr
+    } catch(e) {
+      return dateStr
+    }
+  }
+
   function handleNoteSubmit(e) {
     e.preventDefault()
     if (noteText.trim()) {
@@ -74,22 +204,26 @@ export default function OpportunityDetail({ isSidebarCollapsed = false }) {
   }
 
   return (
-    <div style={{ padding: '32px', maxWidth: 960, margin: '0 auto' }}>
+    <div className="opportunity-detail-container" style={{ padding: '32px', maxWidth: 960, margin: '0 auto' }}>
       {/* Back nav */}
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate(-1)}
         style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: '#6F7876', fontSize: 13, fontFamily: 'DM Sans, sans-serif',
-          marginBottom: 28, padding: 0,
-          transition: 'color 0.15s',
+          color: '#A3AEAC',
+          fontSize: '14px',
+          fontFamily: 'DM Sans, sans-serif',
+          marginBottom: '24px',
+          padding: 0,
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
         }}
-        onMouseEnter={e => e.currentTarget.style.color = '#A3AEAC'}
-        onMouseLeave={e => e.currentTarget.style.color = '#6F7876'}
       >
-        <ArrowLeft size={15} strokeWidth={1.5} />
-        Volver al pipeline
+        <ChevronLeft size={16} />
+        Pipeline
       </button>
 
       {/* Title section */}
@@ -97,13 +231,12 @@ export default function OpportunityDetail({ isSidebarCollapsed = false }) {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
           <div>
             <h1
-              className="font-clash"
-              style={{ fontSize: 30, fontWeight: 700, color: '#F5F7F7', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.1 }}
+              style={{ fontSize: 40, fontWeight: 300, color: '#F5F7F7', margin: 0, letterSpacing: '-0.02em', lineHeight: 1.1, fontFamily: 'Satoshi, sans-serif' }}
             >
-              {op.nombre}
-            </h1>
-            <p style={{ fontSize: 15, color: '#A3AEAC', margin: '6px 0 0', fontFamily: 'DM Sans, sans-serif' }}>
               {op.cliente}
+            </h1>
+            <p style={{ fontSize: 18, color: '#A3AEAC', margin: '4px 0 0', fontFamily: 'DM Sans, sans-serif', fontWeight: 400 }}>
+              {op.partner}
             </p>
           </div>
           <StatusBadge config={config} />
@@ -116,21 +249,67 @@ export default function OpportunityDetail({ isSidebarCollapsed = false }) {
 
           {/* Info card */}
           <Section title="Información">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <InfoItem label="Cliente" value={op.cliente} />
-              <InfoItem label="Partner" value={op.partner} />
-              <InfoItem label="Tipo de contrato" value={op.tipoContrato} />
-              <InfoItem label="Última actividad" value={formatFechaLarga(op.ultimaActividad)} />
-              <InfoItem label="Valor del contrato" value={
-                <span className="font-clash" style={{ fontSize: 20, fontWeight: 700, color: '#F5F7F7', letterSpacing: '-0.01em' }}>
-                  {formatValor(op.valor)}
-                </span>
-              } />
-              {op.estado === 'sin_respuesta' && op.diasSinRespuesta > 0 && (
-                <InfoItem label="Sin respuesta" value={
-                  <span style={{ color: '#F97316', fontWeight: 600 }}>{op.diasSinRespuesta} días</span>
-                } />
-              )}
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {/* BLOCK 1 - DEAL */}
+              <div>
+                <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: '10px', color: '#6F7876', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px', fontWeight: 500 }}>
+                  Deal
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                  <InfoItem label="Cliente" value={op.cliente} />
+                  <InfoItem label="Partner" value={op.partner} />
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <InfoItem label="Correo del partner" value={op.partnerEmail} />
+                  </div>
+                  {op.estado === 'sin_respuesta' && op.diasSinRespuesta > 0 && (
+                    <div style={{ gridColumn: '1 / -1' }}>
+                      <InfoItem label="Sin respuesta" value={
+                        <span style={{ color: '#F97316', fontWeight: 600 }}>{op.diasSinRespuesta} días</span>
+                      } />
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '20px 0' }} />
+
+              {/* BLOCK 2 - CONTRATO */}
+              <div>
+                <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: '10px', color: '#6F7876', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px', fontWeight: 500 }}>
+                  Contrato
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
+                  <InfoItem label="Tipo de contrato" value={op.tipoContrato} />
+                  <InfoItem label="Última actividad" value={formatFechaLarga(op.ultimaActividad)} />
+                  <InfoItem label="Valor del contrato" value={
+                    <span className="font-clash" style={{ fontSize: 20, fontWeight: 700, color: '#F5F7F7', letterSpacing: '-0.01em' }}>
+                      {formatValor(op.valor)}
+                    </span>
+                  } />
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <InfoItem label="Fecha estimada de cierre" value={
+                      <span style={{ fontFamily: 'Satoshi', fontSize: 15, fontWeight: 500, color: '#F5F7F7' }}>
+                        {formatDate(op.fechaCierre)}
+                      </span>
+                    } />
+                  </div>
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div style={{ height: '1px', background: 'rgba(255,255,255,0.06)', margin: '20px 0' }} />
+
+              {/* BLOCK 3 - PRODUCTO */}
+              <div>
+                <p style={{ fontFamily: 'DM Sans, sans-serif', fontSize: '10px', color: '#6F7876', textTransform: 'uppercase', letterSpacing: '0.08em', margin: '0 0 12px', fontWeight: 500 }}>
+                  Producto
+                </p>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                  <InfoItem label="Producto" value={op.producto} />
+                  <InfoItem label="Cantidad" value={op.cantidad} />
+                </div>
+              </div>
             </div>
           </Section>
 
@@ -236,118 +415,170 @@ export default function OpportunityDetail({ isSidebarCollapsed = false }) {
           {/* Quick actions */}
           <Section title="Acciones">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <ActionButton
-                icon={Send}
-                label="Enviar Pulse Check"
-                onClick={() => enviarPulseCheck(op.id)}
-                color="#F5B942"
-              />
-              {!['cerrada', 'ganada', 'perdida'].includes(op.estado) && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <button
-                    onClick={() => setConfirmAction('ganada')}
-                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 14px', background: '#B0FF92', border: 'none', borderRadius: 9, color: '#121716', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', width: '100%', textAlign: 'left', transition: 'opacity 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
-                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
-                  >
-                    <CheckCircle size={15} strokeWidth={2} />
-                    Cerrar como ganada
-                  </button>
-                  <button
-                    onClick={() => setConfirmAction('perdida')}
-                    style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 14px', background: 'transparent', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 9, color: '#A3AEAC', fontSize: 13, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', width: '100%', textAlign: 'left', transition: 'all 0.15s' }}
-                    onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
-                    onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
-                  >
-                    <XCircle size={15} strokeWidth={1.5} />
-                    Descalificar
-                  </button>
-                </div>
-              )}
+              {/* 1. Enviar Pulse Check */}
+              <button
+                onClick={() => {
+                  const periodoAtribucion = parseInt(localStorage.getItem('periodoAtribucion') || '7')
+                  const pulseCheck = {
+                    id: `pulse_${op.id}_${Date.now()}`,
+                    date: new Date().toISOString().slice(0,10),
+                    type: 'manual',
+                    sentBy: 'Carlos',
+                    message: getDefaultMessage(op),
+                    status: 'enviado'
+                  }
+                  enviarPulseCheck(op.id, pulseCheck)
+                  if (op.estado === 'nueva') {
+                    cambiarEstado(op.id, 'esperando')
+                  }
+                  setShowPulseChat(true)
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#A3AEAC', fontSize: 14, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', width: '100%', textAlign: 'left', transition: 'all 0.2s ease' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.background = 'transparent' }}
+              >
+                <Send size={16} strokeWidth={2} />
+                Enviar Pulse Check
+              </button>
+
+              {/* 2. Poner en espera */}
+              <button
+                onClick={() => setShowPauseModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#A3AEAC', fontSize: 14, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', width: '100%', textAlign: 'left', transition: 'all 0.2s ease' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.background = 'transparent' }}
+              >
+                <PauseCircle size={16} strokeWidth={2} />
+                Poner en espera
+              </button>
+
+              {/* 3. Configurar automatización */}
+              <button
+                onClick={() => setShowAutomationModal(!showAutomationModal)}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#A3AEAC', fontSize: 14, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', width: '100%', textAlign: 'left', transition: 'all 0.2s ease' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.background = 'transparent' }}
+              >
+                <Settings2 size={16} strokeWidth={2} />
+                Configurar automatización
+              </button>
+
+
+              {/* Divider */}
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.04)', margin: '8px 0' }} />
+
+              {/* 5. Cerrar como ganada */}
+              <button
+                onClick={() => setConfirmAction('ganada')}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#A3AEAC', fontSize: 14, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', width: '100%', textAlign: 'left', transition: 'all 0.2s ease' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.background = 'transparent' }}
+              >
+                <CheckCircle size={16} strokeWidth={2} />
+                Cerrar como ganada
+              </button>
+
+              {/* 6. Descalificar */}
+              <button
+                onClick={() => setConfirmAction('perdida')}
+                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'transparent', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, color: '#A3AEAC', fontSize: 14, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', width: '100%', textAlign: 'left', transition: 'all 0.2s ease' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.background = 'transparent' }}
+              >
+                <XCircle size={16} strokeWidth={2} />
+                Descalificar
+              </button>
             </div>
           </Section>
 
           {/* Pulse check history */}
-          <Section title="Historial de Pulse Checks">
-            {op.pulseChecks.length === 0 ? (
-              <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif' }}>
-                Sin Pulse Checks enviados.
-              </p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {op.pulseChecks.map((pc, i) => {
-                  const s = PULSE_ESTADO_CONFIG[pc.estado] || PULSE_ESTADO_CONFIG['Enviado']
-                  return (
-                    <div
-                      key={i}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        justifyContent: 'space-between',
-                        padding: '10px 12px',
-                        background: 'rgba(255,255,255,0.03)',
-                        border: '1px solid rgba(255,255,255,0.05)',
-                        borderRadius: 8,
-                        gap: 8,
-                      }}
-                    >
-                      <div>
-                        <p style={{ fontSize: 12, color: '#F5F7F7', margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>
-                          {formatFechaLarga(pc.fecha)}
-                        </p>
-                        <p style={{ fontSize: 11, color: '#6F7876', margin: '2px 0 0', fontFamily: 'DM Sans, sans-serif' }}>
-                          {pc.destinatario}
-                        </p>
-                      </div>
-                      <span style={{
-                        fontSize: 11, fontWeight: 600,
-                        color: s.color,
-                        background: s.bg,
-                        border: `1px solid ${s.border}`,
-                        padding: '2px 8px',
-                        borderRadius: 4,
-                        whiteSpace: 'nowrap',
-                        flexShrink: 0,
-                      }}>
-                        {pc.estado}
-                      </span>
-                    </div>
-                  )
-                })}
+          {op.estado !== 'nueva' && (
+            <Section title="Historial de Pulse Checks">
+              {op.pulseChecks.length === 0 ? (
+                <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif' }}>
+                  Sin Pulse Checks enviados.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {op.pulseChecks.slice(-3).reverse().map((pc, i) => {
+                    const pcDate = pc.date || pc.fecha
+                    const pcPartner = pc.sentBy || pc.destinatario
+                    const hasResponse = pc.partnerResponse || pc.status === 'respondido' || pc.estado === 'Respondido'
+                    const badgeText = hasResponse ? 'Respondido' : 'Enviado'
+                    const badgeColor = hasResponse ? '#B0FF92' : '#A3AEAC'
+                    const badgeBg = hasResponse ? 'rgba(176,255,146,0.1)' : 'rgba(255,255,255,0.06)'
+                    const badgeBorder = hasResponse ? 'rgba(176,255,146,0.2)' : 'rgba(255,255,255,0.1)'
 
-                {/* Abrir conversación button */}
-                <button
-                  onClick={() => setPulseCheckPanelOpen(true)}
-                  style={{
-                    marginTop: 12,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '8px 16px',
-                    background: 'transparent',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: 8,
-                    color: '#A3AEAC',
-                    fontSize: 13,
-                    cursor: 'pointer',
-                    fontFamily: 'DM Sans, sans-serif',
-                    transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.color = '#F5F7F7'
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.color = '#A3AEAC'
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'
-                  }}
-                >
-                  <MessageCircle size={15} strokeWidth={1.5} />
-                  Abrir conversación
-                </button>
-              </div>
-            )}
-          </Section>
+                    return (
+                      <div
+                        key={i}
+                        onClick={() => {
+                          setShowPulseChat(true)
+                          setSelectedMessageId(pcDate)
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      >
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            justifyContent: 'space-between',
+                            padding: '10px 12px',
+                            background: 'rgba(255,255,255,0.03)',
+                            border: '1px solid rgba(255,255,255,0.05)',
+                            borderRadius: 8,
+                            gap: 8,
+                          }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <p style={{ fontSize: 12, color: '#F5F7F7', margin: 0, fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>
+                              {formatFechaLarga(pcDate)}
+                            </p>
+                            <p style={{ fontSize: 11, color: '#6F7876', margin: '2px 0 0', fontFamily: 'DM Sans, sans-serif' }}>
+                              {pcPartner}
+                            </p>
+                          </div>
+                          <span style={{
+                            fontSize: 11, fontWeight: 600,
+                            color: badgeColor,
+                            background: badgeBg,
+                            border: `1px solid ${badgeBorder}`,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0,
+                          }}>
+                            {badgeText}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {op.pulseChecks.length > 0 && (
+                    <button
+                      onClick={() => setShowPulseChat(true)}
+                      style={{
+                        marginTop: 12,
+                        background: 'none',
+                        border: 'none',
+                        color: '#B0FF92',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        padding: 0,
+                        transition: 'opacity 0.2s',
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.opacity = '0.7' }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                    >
+                      Ver conversación completa →
+                    </button>
+                  )}
+                </div>
+              )}
+            </Section>
+          )}
 
           <PulseSchedule op={op} onToggle={() => toggleAutomatico(op.id)} />
 
@@ -393,7 +624,8 @@ export default function OpportunityDetail({ isSidebarCollapsed = false }) {
                   if (confirmAction === 'ganada') cerrarComoGanada(op.id)
                   else cerrarComoPerdida(op.id)
                   setConfirmAction(null)
-                  navigate('/')
+                  setToastMsg('Oportunidad movida al Historial')
+                  setTimeout(() => setToastMsg(null), 3000)
                 }}
                 style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#B0FF92', color: '#121716', fontSize: 13, fontWeight: 600, fontFamily: 'DM Sans, sans-serif', cursor: 'pointer', transition: 'opacity 0.15s' }}
                 onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
@@ -407,18 +639,829 @@ export default function OpportunityDetail({ isSidebarCollapsed = false }) {
         document.body
       )}
 
+      {/* Pause Modal */}
+      {showPauseModal && createPortal(
+        <div
+          style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.75)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowPauseModal(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '480px',
+              background: 'rgba(18,23,22,0.97)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '12px',
+              padding: '28px',
+              backdropFilter: 'blur(24px)',
+            }}
+          >
+            {/* Title */}
+            <h2 className="font-clash" style={{ fontSize: 18, fontWeight: 700, color: '#F5F7F7', margin: '0 0 24px', letterSpacing: '-0.02em' }}>
+              Poner en espera
+            </h2>
+
+            {/* Date Picker */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6 }}>
+                ¿Hasta cuándo?
+              </label>
+              <input
+                type="date"
+                value={pauseDate}
+                onChange={e => setPauseDate(e.target.value)}
+                min={new Date().toISOString().split('T')[0]}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  colorScheme: 'dark',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            {/* Optional Note */}
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6 }}>
+                Motivo (opcional)
+              </label>
+              <textarea
+                value={pauseReason}
+                onChange={e => setPauseReason(e.target.value)}
+                placeholder="ej. El cliente decide en junio"
+                style={{
+                  width: '100%',
+                  minHeight: '60px',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  colorScheme: 'dark',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                }}
+              />
+            </div>
+
+            {/* Divider */}
+            <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', marginBottom: 20 }} />
+
+            {/* Pulse Check Automático al Reactivar */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <button
+                  onClick={() => setPauseSendPulse(!pauseSendPulse)}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    width: 32, height: 32,
+                    background: pauseSendPulse ? '#B0FF92' : 'rgba(255,255,255,0.08)',
+                    border: 'none', borderRadius: 6, cursor: 'pointer',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {pauseSendPulse && <span style={{ color: '#121716', fontWeight: 600, fontSize: 16 }}>✓</span>}
+                </button>
+                <label style={{ fontSize: 14, color: '#F5F7F7', fontFamily: 'DM Sans, sans-serif', fontWeight: 500, cursor: 'pointer', flex: 1 }}>
+                  Enviar Pulse Check automático al reactivarse
+                </label>
+              </div>
+
+              {pauseSendPulse && (
+                <div style={{ paddingLeft: 44 }}>
+                  <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Mensaje de reactivación
+                  </label>
+                  <textarea
+                    value={pauseMessage}
+                    onChange={e => setPauseMessage(e.target.value)}
+                    style={{
+                      width: '100%',
+                      minHeight: '80px',
+                      padding: '10px 12px',
+                      background: 'rgba(255,255,255,0.04)',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      borderRadius: 8,
+                      color: '#F5F7F7',
+                      fontSize: 13,
+                      fontFamily: 'DM Sans, sans-serif',
+                      colorScheme: 'dark',
+                      boxSizing: 'border-box',
+                      resize: 'vertical',
+                      marginBottom: 8,
+                    }}
+                  />
+                  <p style={{ fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: 0, lineHeight: 1.5 }}>
+                    ✨ Editable · La IA ajustará este mensaje según el contexto cuando se reactive
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowPauseModal(false)}
+                style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#A3AEAC', fontSize: 13, fontFamily: 'DM Sans, sans-serif', cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setShowPauseModal(false)
+                }}
+                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#B0FF92', color: '#121716', fontSize: 13, fontWeight: 600, fontFamily: 'DM Sans, sans-serif', cursor: 'pointer', transition: 'opacity 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+              >
+                Confirmar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Automation Modal */}
+      {showAutomationModal && createPortal(
+        <div
+          style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', background: 'rgba(0,0,0,0.75)', zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          onClick={() => setShowAutomationModal(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '460px',
+              background: 'rgba(18,23,22,0.97)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '12px',
+              padding: '28px',
+              backdropFilter: 'blur(24px)',
+            }}
+          >
+            {/* Title */}
+            <h2 className="font-clash" style={{ fontSize: 18, fontWeight: 700, color: '#F5F7F7', margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+              Automatización del Pulse Check
+            </h2>
+
+            {/* Subtitle */}
+            <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 20px' }}>
+              {op.cliente}
+            </p>
+
+            {/* Toggle row */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+              <button
+                onClick={() => setAutomationEnabled(!automationEnabled)}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  width: 32, height: 32,
+                  background: automationEnabled ? '#B0FF92' : 'rgba(255,255,255,0.08)',
+                  border: 'none', borderRadius: 6, cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+              >
+                {automationEnabled && <span style={{ color: '#121716', fontWeight: 600, fontSize: 16 }}>✓</span>}
+              </button>
+              <label style={{ fontSize: 14, color: '#F5F7F7', fontFamily: 'DM Sans, sans-serif', fontWeight: 500, cursor: 'pointer', flex: 1 }}>
+                Pulse Check automático
+              </label>
+            </div>
+
+            {automationEnabled && (
+              <>
+                {/* Frecuencia */}
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Frecuencia
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, color: '#A3AEAC', fontFamily: 'DM Sans, sans-serif' }}>Enviar cada</span>
+                    <input
+                      type="number"
+                      value={automationFrequency}
+                      onChange={e => setAutomationFrequency(e.target.value)}
+                      min="1"
+                      max="90"
+                      style={{
+                        width: 60,
+                        padding: '8px 10px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 6,
+                        color: '#F5F7F7',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        textAlign: 'center',
+                      }}
+                    />
+                    <span style={{ fontSize: 13, color: '#A3AEAC', fontFamily: 'DM Sans, sans-serif' }}>días</span>
+                  </div>
+                  <button
+                    onClick={() => setAutomationFrequency('7')}
+                    style={{
+                      fontSize: 11,
+                      color: '#B0FF92',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontFamily: 'DM Sans, sans-serif',
+                      padding: 0,
+                      transition: 'opacity 0.2s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.7' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                  >
+                    Usar configuración global (7 días)
+                  </button>
+                </div>
+
+                {/* Ventana de respuesta */}
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Ventana de respuesta
+                  </label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 13, color: '#A3AEAC', fontFamily: 'DM Sans, sans-serif' }}>Mover a Sin respuesta si no responde en</span>
+                    <input
+                      type="number"
+                      value={automationResponseWindow}
+                      onChange={e => setAutomationResponseWindow(e.target.value)}
+                      min="1"
+                      max="90"
+                      style={{
+                        width: 60,
+                        padding: '8px 10px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 6,
+                        color: '#F5F7F7',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        textAlign: 'center',
+                      }}
+                    />
+                    <span style={{ fontSize: 13, color: '#A3AEAC', fontFamily: 'DM Sans, sans-serif' }}>días</span>
+                  </div>
+                  <button
+                    onClick={() => setAutomationResponseWindow('7')}
+                    style={{
+                      fontSize: 11,
+                      color: '#B0FF92',
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontFamily: 'DM Sans, sans-serif',
+                      padding: 0,
+                      transition: 'opacity 0.2s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.7' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                  >
+                    Usar configuración global (7 días)
+                  </button>
+                </div>
+
+                {/* Info note */}
+                <p style={{ fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '16px 0 0', lineHeight: 1.5 }}>
+                  Los mensajes son generados automáticamente con IA según el estado de la oportunidad en el momento del envío.
+                </p>
+              </>
+            )}
+
+            {/* Buttons */}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 24 }}>
+              <button
+                onClick={() => setShowAutomationModal(false)}
+                style={{ padding: '9px 18px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#A3AEAC', fontSize: 13, fontFamily: 'DM Sans, sans-serif', cursor: 'pointer', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
+                onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setShowAutomationModal(false)
+                }}
+                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: '#B0FF92', color: '#121716', fontSize: 13, fontWeight: 600, fontFamily: 'DM Sans, sans-serif', cursor: 'pointer', transition: 'opacity 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {/* Pulse Check Panel */}
-      <PulseCheckPanel
-        op={op}
-        isOpen={pulseCheckPanelOpen}
-        onClose={() => {
-          setPulseCheckPanelOpen(false)
-          setPulseCheckPanelExpanded(false)
-        }}
-        isExpanded={pulseCheckPanelExpanded}
-        onToggleExpand={() => setPulseCheckPanelExpanded(!pulseCheckPanelExpanded)}
-        sidebarCollapsed={isSidebarCollapsed}
-      />
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        right: pulseCheckPanelExpanded ? 'auto' : 0,
+        left: pulseCheckPanelExpanded ? '240px' : 'auto',
+        width: pulseCheckPanelExpanded ? 'calc(100vw - 240px)' : '45vw',
+        height: '100vh',
+        zIndex: 1000,
+        background: '#121716',
+        borderLeft: '1px solid rgba(255,255,255,0.06)',
+        transform: showPulseChat && !isClosing
+          ? 'translateX(0)'
+          : 'translateX(100%)',
+        transition: 'transform 0.5s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease',
+        opacity: showPulseChat ? 1 : 0,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden'
+      }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          width: '100%'
+        }}>
+
+          {/* Header */}
+          <div style={{
+            padding: '16px 20px',
+            borderBottom: '1px solid rgba(255,255,255,0.06)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            <button onClick={handleCloseChat} style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: '6px',
+              width: '28px', height: '28px',
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer', color: '#6F7876'
+            }}>
+              <ChevronRight size={14}/>
+            </button>
+            <button onClick={() => setPulseCheckPanelExpanded(!pulseCheckPanelExpanded)} style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: '6px',
+              width: '28px', height: '28px',
+              display: 'flex', alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer', color: '#6F7876'
+            }}>
+              <Maximize2 size={14}/>
+            </button>
+            {pulseCheckPanelExpanded && (
+              <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <span
+                  onClick={() => navigate('/')}
+                  style={{cursor: 'pointer', color: '#A3AEAC', fontSize: '14px', fontFamily: 'DM Sans', fontWeight: 400}}
+                >
+                  Pipeline
+                </span>
+                {fromNuevas && (
+                  <>
+                    <span style={{color: '#6F7876', fontSize: '13px'}}>·</span>
+                    <span
+                      onClick={() => navigate('/nuevas')}
+                      style={{cursor: 'pointer', color: '#A3AEAC', fontSize: '14px', fontFamily: 'DM Sans'}}
+                    >
+                      Recién cargadas
+                    </span>
+                  </>
+                )}
+                <span style={{color: '#6F7876', fontSize: '13px'}}>·</span>
+                <span
+                  onClick={() => setPulseCheckPanelExpanded(false)}
+                  style={{cursor: 'pointer', color: '#F5F7F7', fontSize: '14px', fontFamily: 'DM Sans', fontWeight: 500}}
+                >
+                  {op?.cliente}
+                </span>
+                <span style={{color: '#6F7876', fontSize: '13px'}}>·</span>
+                <span style={{color: '#B0FF92', fontSize: '14px', fontFamily: 'DM Sans', fontWeight: 500}}>
+                  Conversación
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Messages */}
+          <div ref={messagesEndRef} style={{
+            flex: 1,
+            overflowY: 'auto',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            overflowAnchor: 'none',
+            visibility: showPulseChat ? 'visible' : 'hidden',
+            opacity: chatVisible ? 1 : 0
+          }}>
+            {op.estado === 'nueva' ? (
+              <>
+                {op.crmContext ? (
+                  <div style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    borderLeft: '2px solid rgba(255,255,255,0.15)',
+                    borderRadius: '4px',
+                    padding: '14px',
+                    marginBottom: '20px'
+                  }}>
+                    <p style={{
+                      margin: '0 0 8px',
+                      fontFamily: 'DM Sans',
+                      fontSize: '10px',
+                      color: '#6F7876',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      fontWeight: 500
+                    }}>
+                      CONTEXTO DEL CRM
+                    </p>
+                    <p style={{
+                      margin: 0,
+                      fontFamily: 'DM Sans',
+                      fontSize: '13px',
+                      color: '#A3AEAC',
+                      fontStyle: 'italic',
+                      lineHeight: 1.5
+                    }}>
+                      {op.crmContext}
+                    </p>
+                  </div>
+                ) : (
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flex: 1,
+                    textAlign: 'center'
+                  }}>
+                    <MessageCircle size={32} color="#6F7876" style={{marginBottom: '12px'}} />
+                    <p style={{
+                      margin: 0,
+                      fontFamily: 'DM Sans',
+                      fontSize: '14px',
+                      color: '#6F7876',
+                      fontWeight: 500,
+                      marginBottom: '8px'
+                    }}>
+                      Sin conversación previa
+                    </p>
+                    <p style={{
+                      margin: 0,
+                      fontFamily: 'DM Sans',
+                      fontSize: '12px',
+                      color: '#3D4F6E',
+                      lineHeight: 1.5
+                    }}>
+                      El mensaje de IA tomará en cuenta<br/>el contexto de la oportunidad
+                    </p>
+                  </div>
+                )}
+              </>
+            ) : op.estado === 'sin_respuesta' && op.pulseChecks && op.pulseChecks.length > 0 ? (
+              <>
+                {op.pulseChecks.map((pc, idx) => {
+                  const pcDateStr = formatChatDate(pc.date)
+                  const partnerDate = formatChatDate(pc.partnerResponse?.date)
+
+                  let showDateSeparator = false
+                  if (idx === 0) {
+                    showDateSeparator = true
+                  } else if (idx > 0 && pc.date && op.pulseChecks[idx - 1].date) {
+                    const currentDate = new Date(pc.date)
+                    const prevDate = new Date(op.pulseChecks[idx - 1].date)
+                    const weeksDiff = Math.floor((prevDate - currentDate) / (7 * 24 * 60 * 60 * 1000))
+                    if (weeksDiff !== 0) {
+                      showDateSeparator = true
+                    }
+                  }
+
+                  return (
+                    <div key={idx}>
+                      {showDateSeparator && (
+                        <div style={{
+                          textAlign: 'center',
+                          color: '#6F7876',
+                          fontSize: '12px',
+                          fontFamily: 'DM Sans',
+                          marginBottom: '20px',
+                          marginTop: idx > 0 ? '20px' : '0'
+                        }}>
+                          {pcDateStr}
+                        </div>
+                      )}
+                      <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '16px'}}>
+                        <div style={{
+                          background: 'rgba(176,255,146,0.08)',
+                          border: '1px solid rgba(176,255,146,0.15)',
+                          borderRadius: '12px 12px 2px 12px',
+                          padding: '12px 16px',
+                          maxWidth: '65%'
+                        }}>
+                          <p style={{margin: 0, fontFamily: 'DM Sans', fontSize: '14px', color: '#F5F7F7', lineHeight: 1.5}}>
+                            {pc.message}
+                          </p>
+                          <p style={{margin: '4px 0 0', fontFamily: 'DM Sans', fontSize: '10px', color: '#6F7876'}}>
+                            Enviado ✓ · {pcDateStr}
+                          </p>
+                        </div>
+                      </div>
+                      {pc.partnerResponse && (
+                        <div style={{display: 'flex', justifyContent: 'flex-start', marginBottom: '16px', flexDirection: 'column'}}>
+                          <p style={{fontSize: '10px', fontFamily: 'DM Sans', color: '#6F7876', margin: '0 0 4px'}}>
+                            {pc.partnerResponse.type === 'quick' ? 'Respuesta rápida' : 'Respuesta del partner'}
+                          </p>
+                          {pc.partnerResponse.type === 'quick' ? (
+                            <>
+                              <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: 'rgba(176,255,146,0.08)',
+                                border: '1px solid rgba(176,255,146,0.2)',
+                                borderRadius: '20px',
+                                padding: '6px 14px',
+                                color: '#B0FF92',
+                                fontFamily: 'DM Sans',
+                                fontSize: '13px'
+                              }}>
+                                ✓ {pc.partnerResponse.text}
+                              </div>
+                              <p style={{fontFamily: 'DM Sans', fontSize: '10px', color: '#6F7876', margin: '4px 0 0'}}>
+                                {partnerDate}
+                              </p>
+                            </>
+                          ) : (
+                            <div style={{
+                              background: 'rgba(255,255,255,0.04)',
+                              border: '1px solid rgba(255,255,255,0.06)',
+                              borderRadius: '12px 12px 12px 2px',
+                              padding: '12px 16px',
+                              maxWidth: '65%'
+                            }}>
+                              <p style={{margin: 0, fontFamily: 'DM Sans', fontSize: '14px', color: '#F5F7F7', lineHeight: 1.5}}>
+                                {pc.partnerResponse.text}
+                              </p>
+                              <p style={{margin: '4px 0 0', fontFamily: 'DM Sans', fontSize: '10px', color: '#6F7876'}}>
+                                {partnerDate}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </>
+            ) : op.pulseChecks && op.pulseChecks.length > 0 ? (
+              <>
+                {op.pulseChecks.map((pc, idx) => {
+                  const pcDateStr = formatChatDate(pc.date)
+                  const partnerDate = formatChatDate(pc.partnerResponse?.date)
+
+                  return (
+                    <div key={idx}>
+                      <div style={{display: 'flex', justifyContent: 'flex-end', marginBottom: '16px'}}>
+                        <div style={{
+                          background: 'rgba(176,255,146,0.08)',
+                          border: '1px solid rgba(176,255,146,0.15)',
+                          borderRadius: '12px 12px 2px 12px',
+                          padding: '12px 16px',
+                          maxWidth: '65%'
+                        }}>
+                          <p style={{margin: 0, fontFamily: 'DM Sans', fontSize: '14px', color: '#F5F7F7', lineHeight: 1.5}}>
+                            {pc.message}
+                          </p>
+                          <p style={{margin: '4px 0 0', fontFamily: 'DM Sans', fontSize: '10px', color: '#6F7876'}}>
+                            Enviado ✓ · {pcDateStr}
+                          </p>
+                        </div>
+                      </div>
+                      {pc.partnerResponse && (
+                        <div style={{display: 'flex', justifyContent: 'flex-start', marginBottom: '16px', flexDirection: 'column'}}>
+                          <p style={{fontSize: '10px', fontFamily: 'DM Sans', color: '#6F7876', margin: '0 0 4px'}}>
+                            {pc.partnerResponse.type === 'quick' ? 'Respuesta rápida' : 'Respuesta del partner'}
+                          </p>
+                          {pc.partnerResponse.type === 'quick' ? (
+                            <>
+                              <div style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                background: 'rgba(176,255,146,0.08)',
+                                border: '1px solid rgba(176,255,146,0.2)',
+                                borderRadius: '20px',
+                                padding: '6px 14px',
+                                color: '#B0FF92',
+                                fontFamily: 'DM Sans',
+                                fontSize: '13px'
+                              }}>
+                                ✓ {pc.partnerResponse.text}
+                              </div>
+                              <p style={{fontFamily: 'DM Sans', fontSize: '10px', color: '#6F7876', margin: '4px 0 0'}}>
+                                {partnerDate}
+                              </p>
+                            </>
+                          ) : (
+                            <div style={{
+                              background: 'rgba(255,255,255,0.04)',
+                              border: '1px solid rgba(255,255,255,0.06)',
+                              borderRadius: '12px 12px 12px 2px',
+                              padding: '12px 16px',
+                              maxWidth: '65%'
+                            }}>
+                              <p style={{margin: 0, fontFamily: 'DM Sans', fontSize: '14px', color: '#F5F7F7', lineHeight: 1.5}}>
+                                {pc.partnerResponse.text}
+                              </p>
+                              <p style={{margin: '4px 0 0', fontFamily: 'DM Sans', fontSize: '10px', color: '#6F7876'}}>
+                                {partnerDate}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </>
+            ) : (
+              <>
+                <div style={{
+                  textAlign: 'center',
+                  color: '#6F7876',
+                  fontSize: '12px',
+                  fontFamily: 'DM Sans',
+                  marginBottom: '20px'
+                }}>
+                  No hay historial de conversaciones
+                </div>
+              </>
+            )}
+            <div ref={messagesBottomRef} style={{height: '1px'}} />
+          </div>
+
+          {/* Input */}
+          <div style={{
+            padding: '16px 20px',
+            borderTop: '1px solid rgba(255,255,255,0.06)'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '8px'
+            }}>
+              <span style={{
+                fontFamily: 'DM Sans', fontSize: '11px',
+                color: '#6F7876', textTransform: 'uppercase',
+                letterSpacing: '0.06em'
+              }}>Mensaje</span>
+              <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                <span style={{fontFamily: 'DM Sans', fontSize: '12px', color: '#6F7876'}}>
+                  Usar predeterminado
+                </span>
+                <Toggle value={usarPredeterminado} onChange={setUsarPredeterminado} />
+              </div>
+            </div>
+
+            {/* AI Explanation */}
+            <div style={{
+              background: 'rgba(176,255,146,0.05)',
+              border: '1px solid rgba(176,255,146,0.1)',
+              borderRadius: '8px',
+              padding: '10px 14px',
+              marginBottom: '12px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px'
+            }}>
+              <Sparkles size={14} style={{color: '#B0FF92', marginTop: '2px', flexShrink: 0}}/>
+              <p style={{
+                margin: 0,
+                fontFamily: 'DM Sans',
+                fontSize: '12px',
+                color: '#6F7876',
+                lineHeight: 1.5
+              }}>
+                El mensaje es generado por IA con el contexto
+                de esta oportunidad. Puedes editarlo antes de enviar.
+              </p>
+            </div>
+
+            {/* Partner Email */}
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '12px'
+            }}>
+              <Mail size={13} style={{color: '#6F7876'}}/>
+              <span style={{
+                fontFamily: 'DM Sans',
+                fontSize: '12px',
+                color: '#6F7876'
+              }}>
+                Enviar a:
+              </span>
+              <span style={{
+                fontFamily: 'DM Sans',
+                fontSize: '12px',
+                color: '#A3AEAC'
+              }}>
+                {op?.partner?.toLowerCase().replace(/\s+/g, '.')}@example.com
+              </span>
+            </div>
+
+            <textarea
+              placeholder="Escribe un mensaje..."
+              value={usarPredeterminado ? getDefaultMessage(op) : mensajeChat}
+              onChange={(e) => {
+                if (!usarPredeterminado) setMensajeChat(e.target.value)
+              }}
+              readOnly={usarPredeterminado}
+              style={{
+                width: '100%',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '8px',
+                padding: '10px 14px',
+                color: '#F5F7F7',
+                fontFamily: 'DM Sans',
+                fontSize: '14px',
+                resize: 'none',
+                minHeight: '100px',
+                maxHeight: '160px',
+                overflowY: 'auto',
+                boxSizing: 'border-box',
+                opacity: usarPredeterminado ? 0.7 : 1,
+                cursor: usarPredeterminado ? 'default' : 'text'
+              }}
+            />
+            <div style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              marginTop: '8px'
+            }}>
+              <button
+                onClick={() => {
+                  const mensaje = usarPredeterminado
+                    ? getDefaultMessage(op)
+                    : mensajeChat
+
+                  if (!mensaje) return
+
+                  const pulseCheck = {
+                    id: `pulse_${op.id}_${Date.now()}`,
+                    date: new Date().toISOString().slice(0,10),
+                    type: usarPredeterminado ? 'auto' : 'manual',
+                    sentBy: 'Carlos',
+                    message: mensaje,
+                    status: 'enviado'
+                  }
+
+                  enviarPulseCheck(op.id, pulseCheck)
+
+                  if (op.estado === 'nueva') {
+                    cambiarEstado(op.id, 'esperando')
+                  }
+
+                  setMensajeChat('')
+                }}
+                style={{
+                  background: '#B0FF92',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '8px 16px',
+                  color: '#121716',
+                  fontFamily: 'DM Sans',
+                  fontSize: '14px',
+                  fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+              >
+                Enviar Pulse Check
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -541,11 +1584,7 @@ function PulseSchedule({ op, onToggle }) {
         <p style={{ fontSize: 13, color: '#F5F7F7', margin: 0, fontWeight: 500, fontFamily: 'DM Sans, sans-serif' }}>
           Pulse Check automático
         </p>
-        <button onClick={onToggle} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}>
-          {op.automatico
-            ? <ToggleRight size={32} color="#B0FF92" strokeWidth={1.5} />
-            : <ToggleLeft size={32} color="#6F7876" strokeWidth={1.5} />}
-        </button>
+        <Toggle value={op.automatico} onChange={onToggle} />
       </div>
 
       {/* Expanded options when ON */}

@@ -52,19 +52,21 @@ export function AppProvider({ children }) {
     )
   }
 
-  function enviarPulseCheck(id) {
+  function enviarPulseCheck(id, pulseCheck) {
+    const today = new Date().toISOString().slice(0, 10)
     setOportunidades(prev =>
       prev.map(o => {
         if (o.id !== id) return o
+        const pc = pulseCheck || { fecha: today, destinatario: o.partner, estado: 'Enviado' }
         return {
           ...o,
-          ultimaActividad: '2026-06-09',
+          ultimaActividad: today,
           pulseChecks: [
-            { fecha: '2026-06-09', destinatario: o.partner, estado: 'Enviado' },
             ...o.pulseChecks,
+            pc,
           ],
           timeline: [
-            { fecha: '2026-06-09', tipo: 'pulse_check', descripcion: 'Pulse Check enviado manualmente' },
+            { fecha: today, tipo: 'pulse_check', descripcion: 'Pulse Check enviado manualmente' },
             ...o.timeline,
           ],
         }
@@ -74,6 +76,15 @@ export function AppProvider({ children }) {
 
   function guardarCompensacion(config) {
     setCompensacion(config)
+  }
+
+  function marcarComoLeida(id) {
+    setOportunidades(prev =>
+      prev.map(o => {
+        if (o.id !== id) return o
+        return { ...o, unread: false }
+      })
+    )
   }
 
   function cerrarComoGanada(id) {
@@ -162,6 +173,63 @@ export function AppProvider({ children }) {
     )
   }
 
+  function cambiarEstado(id, nuevoEstado) {
+    const today = new Date().toISOString().slice(0, 10)
+    setOportunidades(prev =>
+      prev.map(o => {
+        if (o.id !== id) return o
+        return {
+          ...o,
+          estado: nuevoEstado,
+          ultimaActividad: today,
+          timeline: [
+            { fecha: today, tipo: 'cambio_estado', descripcion: `Estado cambiado a ${nuevoEstado}` },
+            ...o.timeline,
+          ],
+        }
+      })
+    )
+  }
+
+  function salirDeEspera(id) {
+    const today = new Date().toISOString().slice(0, 10)
+    const op = oportunidades.find(o => o.id === id)
+    if (!op) return
+
+    const restoredStatus = op.previousStatus || 'esperando'
+
+    setOportunidades(prev =>
+      prev.map(o => {
+        if (o.id !== id) return o
+        return {
+          ...o,
+          enEspera: false,
+          enEsperaHasta: null,
+          enEsperaMotivo: null,
+          estado: restoredStatus,
+          previousStatus: null,
+          timeline: [
+            { fecha: today, tipo: 'reactivacion', descripcion: `Sacada de espera y reactivada como ${restoredStatus}` },
+            ...o.timeline,
+          ],
+        }
+      })
+    )
+
+    setNotificaciones(prev => [
+      {
+        id: Date.now(),
+        tipo: 'reactivada',
+        titulo: 'Oportunidad reactivada',
+        descripcion: `La oportunidad ${op.nombre} con ${op.partner} salió del período de espera. Se envió un Pulse Check automático al partner.`,
+        oportunidadId: op.id,
+        fecha: new Date().toISOString().slice(0, 10),
+        leida: false,
+      },
+      ...prev
+    ])
+  }
+
   useEffect(() => {
     const today = new Date().toISOString().slice(0, 10)
     const toReactivate = oportunidades.filter(o => o.enEspera && o.enEsperaHasta && o.enEsperaHasta <= today)
@@ -169,13 +237,16 @@ export function AppProvider({ children }) {
 
     setOportunidades(prev => prev.map(o => {
       if (!o.enEspera || !o.enEsperaHasta || o.enEsperaHasta > today) return o
+      const restoredStatus = o.previousStatus || 'esperando'
       return {
         ...o,
         enEspera: false,
         enEsperaHasta: null,
         enEsperaMotivo: null,
+        estado: restoredStatus,
+        previousStatus: null,
         timeline: [
-          { fecha: today, tipo: 'reactivacion', descripcion: 'Oportunidad reactivada automáticamente' },
+          { fecha: today, tipo: 'reactivacion', descripcion: `Oportunidad reactivada automáticamente como ${restoredStatus}` },
           ...o.timeline,
         ],
       }
@@ -183,14 +254,13 @@ export function AppProvider({ children }) {
 
     setNotificaciones(prev => [
       ...toReactivate.map(o => ({
-        id: `n_react_${o.id}`,
-        tipo: 'reactivacion',
-        titulo: `${o.nombre} se reactivó`,
-        descripcion: `La oportunidad con ${o.partner} salió de pausa. Es momento de hacer seguimiento.`,
+        id: Date.now() + Math.random(),
+        tipo: 'reactivada',
+        titulo: 'Oportunidad reactivada',
+        descripcion: `La oportunidad ${o.nombre} con ${o.partner} salió del período de espera. Se envió un Pulse Check automático al partner.`,
+        oportunidadId: o.id,
         fecha: today,
         leida: false,
-        prioridad: 'media',
-        oportunidadId: o.id,
       })),
       ...prev,
     ])
@@ -205,14 +275,17 @@ export function AppProvider({ children }) {
       unreadCount,
       marcarLeida,
       marcarTodasLeidas,
+      marcarComoLeida,
       toggleAutomatico,
       agregarNota,
       enviarPulseCheck,
+      cambiarEstado,
       cerrarComoGanada,
       cerrarComoPerdida,
       cerrarOportunidad,
       reactivarDesdeHistorial,
       ponerEnEspera,
+      salirDeEspera,
       compensacion,
       guardarCompensacion,
     }}>

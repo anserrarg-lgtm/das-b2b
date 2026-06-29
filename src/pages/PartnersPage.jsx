@@ -146,9 +146,20 @@ function PartnerRow({ partner, onVerOportunidades }) {
       {/* Right — action */}
       <button
         onClick={e => { e.stopPropagation(); onVerOportunidades() }}
-        style={{ padding: '7px 14px', borderRadius: 8, background: 'rgba(176,255,146,0.08)', border: '1px solid rgba(176,255,146,0.15)', color: '#B0FF92', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif', transition: 'all 0.15s', whiteSpace: 'nowrap', flexShrink: 0 }}
-        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(176,255,146,0.14)'; e.currentTarget.style.borderColor = 'rgba(176,255,146,0.3)' }}
-        onMouseLeave={e => { e.currentTarget.style.background = 'rgba(176,255,146,0.08)'; e.currentTarget.style.borderColor = 'rgba(176,255,146,0.15)' }}
+        style={{
+          padding: '7px 14px',
+          borderRadius: 8,
+          background: 'rgba(176,255,146,0.08)',
+          border: '1px solid rgba(176,255,146,0.15)',
+          color: '#B0FF92',
+          fontSize: 13,
+          cursor: 'pointer',
+          fontFamily: 'DM Sans, sans-serif',
+          whiteSpace: 'nowrap',
+          flexShrink: 0
+        }}
+        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(176,255,146,0.3)'; e.currentTarget.style.color = '#E8FF7F' }}
+        onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(176,255,146,0.15)'; e.currentTarget.style.color = '#B0FF92' }}
       >
         Ver oportunidades
       </button>

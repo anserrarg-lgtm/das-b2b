@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Upload, FileText, CheckCircle2, AlertCircle, ChevronRight } from 'lucide-react'
+import { useApp } from '../context/AppContext'
 
 const SOURCES = [
+  { id: 'manual', label: 'Entrada manual', description: 'Agrega una oportunidad ingresando los datos manualmente', icon: FileText },
   { id: 'csv', label: 'Importar CSV', description: 'Sube un archivo .csv con tus oportunidades', icon: FileText },
   { id: 'salesforce', label: 'Conectar Salesforce', description: 'Importa oportunidades directamente desde Salesforce CRM', icon: () => <SFLogo /> },
   { id: 'hubspot', label: 'Conectar HubSpot', description: 'Sincroniza deals activos desde HubSpot', icon: () => <HSLogo /> },
@@ -9,9 +11,38 @@ const SOURCES = [
 ]
 
 export default function ImportScreen() {
+  const { oportunidades } = useApp()
   const [dragging, setDragging] = useState(false)
   const [uploaded, setUploaded] = useState(false)
   const [selectedSource, setSelectedSource] = useState(null)
+  const [manualFormData, setManualFormData] = useState({
+    nombre: '',
+    cliente: '',
+    partner: '',
+    valor: '',
+    producto: '',
+    cantidad: '',
+    fechaCierre: '',
+  })
+  const [partnerInput, setPartnerInput] = useState('')
+  const [partnerSuggestions, setPartnerSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+
+  const existingPartners = [...new Set(oportunidades?.map(o => o.partner) || [])]
+
+  const handlePartnerInput = (value) => {
+    setPartnerInput(value)
+    setManualFormData({ ...manualFormData, partner: value })
+    if (value.length > 0) {
+      const filtered = existingPartners.filter(p =>
+        p.toLowerCase().includes(value.toLowerCase())
+      )
+      setPartnerSuggestions(filtered)
+      setShowSuggestions(filtered.length > 0)
+    } else {
+      setShowSuggestions(false)
+    }
+  }
 
   function handleDrop(e) {
     e.preventDefault()
@@ -120,32 +151,284 @@ export default function ImportScreen() {
         <div style={{ flex: 1, height: 1, background: 'rgba(255,255,255,0.06)' }} />
       </div>
 
+      {/* Manual entry form */}
+      {selectedSource === 'manual' && (
+        <div style={{
+          padding: '24px',
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.06)',
+          borderRadius: 12,
+          marginBottom: 24,
+        }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: '#F5F7F7', margin: '0 0 20px', fontFamily: 'DM Sans, sans-serif' }}>
+            Agregar oportunidad manualmente
+          </h3>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Nombre de oportunidad
+              </label>
+              <input
+                type="text"
+                placeholder="ej. Expansión Microsoft 365"
+                value={manualFormData.nombre}
+                onChange={e => setManualFormData({ ...manualFormData, nombre: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Cliente
+              </label>
+              <input
+                type="text"
+                placeholder="ej. Meridian Corp"
+                value={manualFormData.cliente}
+                onChange={e => setManualFormData({ ...manualFormData, cliente: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div style={{ position: 'relative' }}>
+              <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Partner
+              </label>
+              <input
+                type="text"
+                placeholder="ej. CloudBridge Partners"
+                value={partnerInput}
+                onChange={(e) => handlePartnerInput(e.target.value)}
+                onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  boxSizing: 'border-box',
+                }}
+              />
+              {showSuggestions && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  background: '#1A1F1E',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: '8px',
+                  zIndex: 9999,
+                  overflow: 'hidden',
+                  marginTop: 4
+                }}>
+                  {partnerSuggestions.map(partner => (
+                    <div
+                      key={partner}
+                      onClick={() => {
+                        setPartnerInput(partner)
+                        setManualFormData({ ...manualFormData, partner })
+                        setShowSuggestions(false)
+                      }}
+                      style={{
+                        padding: '10px 14px',
+                        cursor: 'pointer',
+                        fontSize: 13,
+                        color: '#A3AEAC',
+                        fontFamily: 'DM Sans, sans-serif'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      {partner}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Valor del contrato
+              </label>
+              <input
+                type="number"
+                placeholder="ej. 50000"
+                value={manualFormData.valor}
+                onChange={e => setManualFormData({ ...manualFormData, valor: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Producto
+              </label>
+              <input
+                type="text"
+                placeholder="ej. WorkSpace Pro"
+                value={manualFormData.producto}
+                onChange={e => setManualFormData({ ...manualFormData, producto: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Cantidad
+              </label>
+              <input
+                type="text"
+                placeholder="ej. 50 licencias"
+                value={manualFormData.cantidad}
+                onChange={e => setManualFormData({ ...manualFormData, cantidad: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label style={{ display: 'block', fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Fecha estimada de cierre
+              </label>
+              <input
+                type="date"
+                value={manualFormData.fechaCierre}
+                onChange={e => setManualFormData({ ...manualFormData, fechaCierre: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  color: '#F5F7F7',
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  colorScheme: 'dark',
+                  boxSizing: 'border-box',
+                }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => setSelectedSource(null)}
+              style={{
+                padding: '9px 18px', borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'transparent', color: '#A3AEAC',
+                fontSize: 13, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => {
+                console.log('Guardando oportunidad:', manualFormData)
+                setManualFormData({ nombre: '', cliente: '', partner: '', valor: '', producto: '', cantidad: '', fechaCierre: '' })
+                setSelectedSource(null)
+              }}
+              style={{
+                padding: '9px 18px', borderRadius: 8,
+                border: 'none',
+                background: '#B0FF92', color: '#121716',
+                fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'DM Sans, sans-serif',
+                transition: 'opacity 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
+              onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+            >
+              Guardar oportunidad
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Integration sources */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {SOURCES.filter(s => s.id !== 'csv' && s.id !== 'excel').map(source => {
+        {SOURCES.map(source => {
           const Icon = source.icon
           const isSelected = selectedSource === source.id
+          const isCRM = ['salesforce', 'hubspot'].includes(source.id)
           return (
             <div
               key={source.id}
-              onClick={() => setSelectedSource(isSelected ? null : source.id)}
+              onClick={() => !isCRM && setSelectedSource(isSelected ? null : source.id)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 14,
                 padding: '14px 16px',
-                background: isSelected ? 'rgba(176,255,146,0.04)' : 'rgba(255,255,255,0.03)',
+                background: isSelected ? 'rgba(176,255,146,0.04)' : isCRM ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.03)',
                 border: isSelected ? '1px solid rgba(176,255,146,0.2)' : '1px solid rgba(255,255,255,0.06)',
                 borderRadius: 12,
-                cursor: 'pointer',
+                cursor: isCRM ? 'default' : 'pointer',
+                opacity: isCRM ? 0.5 : 1,
                 transition: 'all 0.15s',
               }}
               onMouseEnter={e => {
-                if (!isSelected) {
+                if (!isSelected && !isCRM) {
                   e.currentTarget.style.background = 'rgba(255,255,255,0.05)'
                   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'
                 }
               }}
               onMouseLeave={e => {
-                if (!isSelected) {
+                if (!isSelected && !isCRM) {
                   e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
                   e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'
                 }

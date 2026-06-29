@@ -166,18 +166,12 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
   return createPortal(
     <div
       style={{
-        position: 'fixed',
-        top: 0,
-        left: panelLeft,
-        width: panelWidth,
-        height: '100vh',
-        background: '#121716',
-        borderLeft: '1px solid rgba(255,255,255,0.06)',
+        width: '100%',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        zIndex: 1000,
-        transform: isOpen ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'transform 0.3s ease, width 0.25s ease, left 0.25s ease',
+        position: 'relative',
+        overflow: 'hidden auto',
       }}
     >
       {/* Panel Header */}
@@ -300,7 +294,7 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
               onMouseEnter={e => e.currentTarget.style.color = '#B0FF92'}
               onMouseLeave={e => e.currentTarget.style.color = '#F5F7F7'}
             >
-              {op.nombre}
+              {op.cliente}
             </button>
             <span style={{ color: '#6F7876', fontWeight: 400 }}>·</span>
             <span style={{ color: '#B0FF92', fontWeight: 500, fontSize: 15 }}>Conversación</span>
@@ -685,14 +679,14 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
       </div>
 
       {/* Send Confirmation Modal */}
-      {showConfirmModal && createPortal(
+      {showConfirmModal && (
         <div
           style={{
-            position: 'fixed',
+            position: 'absolute',
             top: 0,
             left: 0,
-            width: '100vw',
-            height: '100vh',
+            right: 0,
+            bottom: 0,
             background: 'rgba(0,0,0,0.75)',
             zIndex: 99999,
             display: 'flex',
@@ -863,8 +857,7 @@ export default function PulseCheckPanel({ op, isOpen, onClose, isExpanded, onTog
               </button>
             </div>
           </div>
-        </div>,
-        document.body
+        </div>
       )}
     </div>,
     document.body

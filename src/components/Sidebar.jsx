@@ -1,4 +1,4 @@
-import { NavLink, Link, useLocation } from 'react-router-dom'
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutGrid, Bell, Upload, Users } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { useState } from 'react'
@@ -7,11 +7,11 @@ const navItems = [
   { path: '/', label: 'Pipeline', icon: LayoutGrid },
   { path: '/partners', label: 'Partners', icon: Users },
   { path: '/notificaciones', label: 'Notificaciones', icon: Bell },
-  { path: '/importar', label: 'Importar', icon: Upload },
 ]
 
 export default function Sidebar({ isCollapsed, setIsCollapsed }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { unreadCount } = useApp()
   const [hoveredNav, setHoveredNav] = useState(null)
 
@@ -137,19 +137,24 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }) {
               >
                 <Icon size={16} strokeWidth={1.5} style={{ flexShrink: 0 }} />
                 {!isCollapsed && (
-                  <>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    justifyContent: 'space-between',
+                    width: '100%'
+                  }}>
                     <span>{label}</span>
                     {path === '/notificaciones' && unreadCount > 0 && (
                       <span style={{
                         color: '#B0FF92',
                         fontSize: 12,
                         fontWeight: 500,
-                        fontFamily: 'DM Sans, sans-serif',
+                        fontFamily: 'DM Sans, sans-serif'
                       }}>
                         {unreadCount}
                       </span>
                     )}
-                  </>
+                  </div>
                 )}
               </NavLink>
 
@@ -177,6 +182,32 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }) {
           )
         })}
       </nav>
+
+      {/* Ver demo button */}
+      <div style={{ padding: '12px 12px 8px 12px' }}>
+        <button
+          onClick={() => navigate('/pipeline')}
+          style={{
+            width: '100%',
+            background: '#B0FF92',
+            color: '#121716',
+            border: 'none',
+            borderRadius: '8px',
+            padding: '10px 12px',
+            fontFamily: 'DM Sans, sans-serif',
+            fontSize: '14px',
+            fontWeight: 500,
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            opacity: isCollapsed ? 0 : 1,
+            pointerEvents: isCollapsed ? 'none' : 'auto',
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = '#A8EE7C'}
+          onMouseLeave={e => e.currentTarget.style.background = '#B0FF92'}
+        >
+          Ver demo
+        </button>
+      </div>
 
       {/* User */}
       <div style={{ padding: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: 12 }}>

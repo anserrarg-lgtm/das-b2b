@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { ChevronDown, Mail, MessageCircle, Database, RotateCcw } from 'lucide-react'
 import { useApp } from '../context/AppContext'
+import Toggle from '../components/Toggle'
 
 
 const ROL_OPTIONS = [
@@ -23,7 +24,8 @@ const DEFAULT_MESSAGES = {
   activa: 'Hola [nombre], ¿cómo va el proceso con [cliente]? ¿Hay algo en lo que podamos apoyarte para avanzar?',
   esperando: 'Hola [nombre], te escribimos para hacer seguimiento sobre [cliente]. ¿Pudiste avanzar con ellos? Cualquier actualización nos ayuda mucho.',
   sin_respuesta: 'Hola [nombre], llevamos un tiempo sin noticias sobre [cliente]. ¿Sigue activa esta oportunidad? Nos interesa saber si hay algo que esté bloqueando el proceso.',
-  venta_confirmada: 'Hola [nombre], nos llegó información de que [cliente] realizó una compra. ¿Puedes confirmarnos el producto, cantidad y fecha para registrar correctamente la atribución?',
+  respondida: 'Hola [nombre], ¿cómo va el proceso con [cliente]? ¿Hay algo en lo que podamos apoyarte para avanzar?',
+  venta_confirmada: 'Hola [nombre], gracias por confirmar. Para registrar correctamente la venta necesitamos algunos detalles: ¿qué producto se vendió, cuántas licencias y cuál fue la fecha de cierre?',
   reactivacion: 'Hola [nombre], queríamos retomar el contacto sobre [cliente]. ¿Sigue siendo una oportunidad activa o prefieres cerrarla por ahora?',
 }
 
@@ -31,6 +33,7 @@ const MESSAGE_LABELS = {
   activa: 'Activa',
   esperando: 'Esperando respuesta',
   sin_respuesta: 'Sin respuesta',
+  respondida: 'Respondida',
   venta_confirmada: 'Venta confirmada',
   reactivacion: 'Reactivación',
 }
@@ -81,7 +84,10 @@ function CustomDropdown({ value, onChange, options }) {
   return (
     <div style={{ position: 'relative' }}>
       <div
-        onClick={() => setOpen(o => !o)}
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen(o => !o)
+        }}
         style={{
           background: 'rgba(255,255,255,0.04)',
           border: '1px solid rgba(255,255,255,0.06)',
@@ -101,7 +107,11 @@ function CustomDropdown({ value, onChange, options }) {
             {options.map(opt => (
               <div
                 key={opt.value}
-                onClick={() => { onChange(opt.value); setOpen(false) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onChange(opt.value)
+                  setOpen(false)
+                }}
                 style={{ padding: '10px 14px', color: opt.value === value ? '#B0FF92' : '#A3AEAC', fontFamily: 'DM Sans, sans-serif', fontSize: 14, cursor: 'pointer' }}
                 onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#F5F7F7' }}
                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = opt.value === value ? '#B0FF92' : '#A3AEAC' }}
@@ -112,28 +122,6 @@ function CustomDropdown({ value, onChange, options }) {
           </div>
         </>
       )}
-    </div>
-  )
-}
-
-function Toggle({ enabled, onChange }) {
-  return (
-    <div
-      onClick={() => onChange(!enabled)}
-      style={{
-        width: 40, height: 22, borderRadius: 11,
-        background: enabled ? '#B0FF92' : 'rgba(255,255,255,0.1)',
-        cursor: 'pointer', position: 'relative',
-        transition: 'background 0.2s', flexShrink: 0,
-      }}
-    >
-      <div style={{
-        width: 16, height: 16, borderRadius: '50%',
-        background: enabled ? '#121716' : '#6F7876',
-        position: 'absolute', top: 3,
-        left: enabled ? 21 : 3,
-        transition: 'left 0.2s, background 0.2s',
-      }} />
     </div>
   )
 }
@@ -218,26 +206,48 @@ export default function ProfilePage() {
   const [foto, setFoto] = useState(null)
 
   // Section 2
-  const [cuota, setCuota] = useState(compensacion?.cuota?.toString() || '')
-  const [split, setSplit] = useState(compensacion?.split || '6040')
-  const [basePercent, setBasePercent] = useState(
-    compensacion?.split === 'personalizado' ? String(100 - (compensacion.variablePercent || 40)) : '60'
-  )
-  const [varPercent, setVarPercent] = useState(
-    compensacion?.split === 'personalizado' ? String(compensacion.variablePercent || 40) : '40'
-  )
+  const [moneda, setMoneda] = useState('USD')
+  const [salarioBase, setSalarioBase] = useState(compensacion?.salarioBase?.toString() || '')
+  const [basePercent, setBasePercent] = useState(60)
+  const [varPercent, setVarPercent] = useState(40)
+  const [bonusItems, setBonusItems] = useState([
+    { nombre: 'Revenue atribuido', porcentaje: 40 },
+    { nombre: 'Referidos aceptados', porcentaje: 40 },
+    { nombre: 'Asistencia', porcentaje: 20 },
+  ])
+  const [diasHabiles, setDiasHabiles] = useState(0)
+  const [diasInasistencia, setDiasInasistencia] = useState(0)
   const [periodo, setPeriodo]               = useState(compensacion?.periodo || 'mensual')
   const [periodoInicio, setPeriodoInicio]   = useState(compensacion?.periodoInicio || '')
   const [periodoFin, setPeriodoFin]         = useState(compensacion?.periodoFin || '')
+  const [periodoAtribucion, setPeriodoAtribucion] = useState(localStorage.getItem('periodoAtribucion') || '60')
+  const [periodoAtribucionCustom, setPeriodoAtribucionCustom] = useState('')
+
+  // Save periodoAtribucion to localStorage
+  const handlePeriodoAtribucionChange = (value) => {
+    setPeriodoAtribucion(value)
+    if (value !== 'personalizado') {
+      localStorage.setItem('periodoAtribucion', value)
+    }
+  }
+
+  // Calculate bonus total and attendance percentage
+  const bonusTotal = bonusItems.reduce((sum, item) => sum + item.porcentaje, 0)
+  const diasAsistencia = diasHabiles > 0 ? Math.round(((diasHabiles - diasInasistencia) / diasHabiles) * 100) : 0
   // Section 3
   const [canal, setCanal] = useState('email')
   const [frecuencia, setFrecuencia] = useState('14')
   const [frecuenciaPerStatus, setFrecuenciaPerStatus] = useState({
     sin_respuesta: '5',
-    esperando: '7',
-    respondida: '14',
+    venta_confirmada: '3',
   })
   const [mensajes, setMensajes] = useState(DEFAULT_MESSAGES)
+  const [ventanaRespuesta, setVentanaRespuesta] = useState(
+    () => {
+      const stored = localStorage.getItem('ventana_respuesta_partner')
+      return stored ? stored : '7'
+    }
+  )
 
   // Section 4
   const [notifSinRespuesta, setNotifSinRespuesta] = useState(true)
@@ -246,15 +256,12 @@ export default function ProfilePage() {
   const [notifPartnerRespondio, setNotifPartnerRespondio] = useState(true)
   const [notifFrecuencia, setNotifFrecuencia] = useState('inmediato')
 
+  // Pulse Check AI settings
+  const [reviewBeforeSend, setReviewBeforeSend] = useState(false)
+
   const [saved, setSaved] = useState(false)
 
-  const derivedVariable =
-    split === 'personalizado' ? parseFloat(varPercent) || 0
-    : split === '6040' ? 40
-    : split === '7030' ? 30
-    : 50
-
-  const cuotaNum = parseFloat(cuota.replace(/,/g, '')) || 0
+  const salarioBaseNum = parseFloat(salarioBase) || 0
 
   function handleFotoChange(e) {
     const file = e.target.files?.[0]
@@ -265,11 +272,13 @@ export default function ProfilePage() {
   }
 
   function handleSave() {
-    if (cuotaNum > 0) {
+    if (salarioBaseNum > 0) {
       guardarCompensacion({
-        cuota: cuotaNum,
-        split,
-        variablePercent: derivedVariable,
+        salarioBase: salarioBaseNum,
+        moneda,
+        basePercent,
+        variablePercent: varPercent,
+        bonusItems,
         periodo,
         periodoInicio: periodo === 'personalizado' ? periodoInicio : null,
         periodoFin:    periodo === 'personalizado' ? periodoFin    : null,
@@ -341,41 +350,121 @@ export default function ProfilePage() {
       {/* ── SECTION 2: Compensación ── */}
       <section>
         <h2 style={SECTION_TITLE}>Configuración de compensación</h2>
-        <p style={SECTION_DESC}>Define tu cuota, split y período de rendimiento para calcular el bono estimado.</p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+          {/* 1. MONEDA */}
           <div>
-            <p style={FIELD_LABEL}>Cuota mensual (USD)</p>
-            <input type="text" value={cuota} onChange={e => setCuota(e.target.value)} placeholder="ej. 500,000" style={INPUT_STYLE} />
+            <p style={FIELD_LABEL}>MONEDA</p>
+            <CustomDropdown
+              value={moneda} onChange={setMoneda}
+              options={[
+                { value: 'USD', label: 'USD — Dólar estadounidense' },
+                { value: 'COP', label: 'COP — Peso colombiano' },
+                { value: 'EUR', label: 'EUR — Euro' },
+                { value: 'MXN', label: 'MXN — Peso mexicano' },
+                { value: 'BRL', label: 'BRL — Real brasileño' },
+              ]}
+            />
           </div>
 
+          {/* 2. SALARIO Y SPLIT */}
           <div>
-            <p style={FIELD_LABEL}>Split salarial</p>
+            <p style={FIELD_LABEL}>SALARIO BASE MENSUAL</p>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+              <span style={{ position: 'absolute', left: 16, fontSize: 14, color: '#A3AEAC', fontFamily: 'DM Sans, sans-serif' }}>
+                {moneda === 'USD' ? '$' : moneda === 'EUR' ? '€' : moneda}
+              </span>
+              <input
+                type="number"
+                value={salarioBase}
+                onChange={e => setSalarioBase(e.target.value)}
+                placeholder="ej. 5,000"
+                style={{ ...INPUT_STYLE, paddingLeft: 32 }}
+              />
+            </div>
+          </div>
+
+          {/* SPLIT SALARIAL */}
+          <div>
+            <p style={FIELD_LABEL}>SPLIT SALARIAL</p>
+            <p style={{ fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 12px', lineHeight: 1.5 }}>
+              Proporción entre salario fijo y variable
+            </p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+              <div>
+                <p style={{ ...FIELD_LABEL, margin: '0 0 6px' }}>% Base</p>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={basePercent}
+                  onChange={e => {
+                    const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
+                    setBasePercent(val)
+                    setVarPercent(100 - val)
+                  }}
+                  style={INPUT_STYLE}
+                />
+              </div>
+              <div>
+                <p style={{ ...FIELD_LABEL, margin: '0 0 6px' }}>% Variable</p>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={varPercent}
+                  onChange={e => {
+                    const val = Math.max(0, Math.min(100, parseInt(e.target.value) || 0))
+                    setVarPercent(val)
+                    setBasePercent(100 - val)
+                  }}
+                  style={INPUT_STYLE}
+                />
+              </div>
+            </div>
+            {salarioBase && (
+              <p style={{ fontSize: 12, color: '#A3AEAC', fontFamily: 'DM Sans, sans-serif', margin: 0 }}>
+                Base: ${((salarioBase * basePercent) / 100).toLocaleString()} · Variable: ${((salarioBase * varPercent) / 100).toLocaleString()}
+              </p>
+            )}
+          </div>
+
+          {/* 2.5 PERÍODO DE ATRIBUCIÓN */}
+          <div>
+            <p style={FIELD_LABEL}>PERÍODO DE ATRIBUCIÓN</p>
+            <p style={{ fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 10px', lineHeight: 1.5 }}>
+              Tiempo máximo para registrar una venta después de que se confirme
+            </p>
             <CustomDropdown
-              value={split} onChange={setSplit}
+              value={periodoAtribucion}
+              onChange={handlePeriodoAtribucionChange}
               options={[
-                { value: '6040', label: '60/40 (más común)' },
-                { value: '7030', label: '70/30' },
-                { value: '5050', label: '50/50' },
+                { value: '30', label: '30 días' },
+                { value: '45', label: '45 días' },
+                { value: '60', label: '60 días (recomendado)' },
+                { value: '90', label: '90 días' },
                 { value: 'personalizado', label: 'Personalizado' },
               ]}
             />
-            {split === 'personalizado' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 12 }}>
-                <div>
-                  <p style={{ ...FIELD_LABEL, margin: '0 0 6px' }}>% Base</p>
-                  <input type="number" min="0" max="100" value={basePercent} onChange={e => setBasePercent(e.target.value)} placeholder="60" style={INPUT_STYLE} />
-                </div>
-                <div>
-                  <p style={{ ...FIELD_LABEL, margin: '0 0 6px' }}>% Variable</p>
-                  <input type="number" min="0" max="100" value={varPercent} onChange={e => setVarPercent(e.target.value)} placeholder="40" style={INPUT_STYLE} />
-                </div>
+            {periodoAtribucion === 'personalizado' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={periodoAtribucionCustom}
+                  onChange={e => setPeriodoAtribucionCustom(e.target.value)}
+                  placeholder="ej. 75"
+                  style={{ ...INPUT_STYLE, flex: 1 }}
+                />
+                <span style={{ fontSize: 14, color: '#A3AEAC', fontFamily: 'DM Sans, sans-serif', whiteSpace: 'nowrap' }}>días</span>
               </div>
             )}
           </div>
 
+          {/* 3. PERÍODO DE RENDIMIENTO */}
           <div>
-            <p style={FIELD_LABEL}>Período de rendimiento</p>
+            <p style={FIELD_LABEL}>PERÍODO DE RENDIMIENTO</p>
             <p style={{ fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 10px', lineHeight: 1.5 }}>
               Define cada cuánto se miden tus resultados y se calcula tu bono
             </p>
@@ -405,18 +494,161 @@ export default function ProfilePage() {
             )}
           </div>
 
+          {/* 4. SPLIT DE BONIFICACIÓN */}
+          <div>
+            <p style={FIELD_LABEL}>SPLIT DE BONIFICACIÓN</p>
+            <p style={{ fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 12px', lineHeight: 1.5 }}>
+              Define cómo se distribuye tu bono variable entre las métricas que te evalúan
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {bonusItems.map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', gap: 12, alignItems: 'flex-end' }}>
+                  <input
+                    type="text"
+                    value={item.nombre}
+                    onChange={e => {
+                      const newItems = [...bonusItems]
+                      newItems[idx].nombre = e.target.value
+                      setBonusItems(newItems)
+                    }}
+                    placeholder="Nombre de la métrica"
+                    style={{ ...INPUT_STYLE, flex: 1 }}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={item.porcentaje}
+                      onChange={e => {
+                        const newItems = [...bonusItems]
+                        newItems[idx].porcentaje = parseInt(e.target.value) || 0
+                        setBonusItems(newItems)
+                      }}
+                      style={{ ...INPUT_STYLE, width: 80 }}
+                    />
+                    <span style={{ fontSize: 14, color: '#A3AEAC' }}>%</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (bonusItems.length > 1) {
+                        setBonusItems(bonusItems.filter((_, i) => i !== idx))
+                      }
+                    }}
+                    disabled={bonusItems.length === 1}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: bonusItems.length === 1 ? '#4A5452' : '#A3AEAC',
+                      cursor: bonusItems.length === 1 ? 'not-allowed' : 'pointer',
+                      fontSize: 18,
+                      padding: '8px 12px',
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ fontSize: 12, color: bonusTotal === 100 ? '#B0FF92' : '#F97316', fontFamily: 'DM Sans, sans-serif', margin: 0 }}>
+                Total: {bonusTotal}% {bonusTotal === 100 ? '✓' : '— debe sumar 100%'}
+              </p>
+              <button
+                onClick={() => setBonusItems([...bonusItems, { nombre: 'Nueva métrica', porcentaje: 0 }])}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#B0FF92',
+                  fontFamily: 'DM Sans, sans-serif',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+              >
+                + Agregar métrica
+              </button>
+            </div>
+          </div>
+
+          {/* 5. ASISTENCIA CARD - Conditional */}
+          {bonusItems.some(item => item.nombre.toLowerCase() === 'asistencia' || item.porcentaje > 0) && (
+            <div style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: 10,
+              padding: 20,
+            }}>
+              <h3 style={{
+                fontSize: 15,
+                fontWeight: 700,
+                fontFamily: "'Satoshi', sans-serif",
+                color: '#F5F7F7',
+                margin: '0 0 16px',
+              }}>
+                Registrar asistencia este período
+              </h3>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                <div>
+                  <p style={{ ...FIELD_LABEL, margin: '0 0 6px' }}>Días hábiles del período</p>
+                  <input
+                    type="number"
+                    value={diasHabiles}
+                    onChange={e => setDiasHabiles(parseInt(e.target.value) || 0)}
+                    placeholder="ej. 22"
+                    style={INPUT_STYLE}
+                  />
+                </div>
+                <div>
+                  <p style={{ ...FIELD_LABEL, margin: '0 0 6px' }}>Días de inasistencia</p>
+                  <input
+                    type="number"
+                    value={diasInasistencia}
+                    onChange={e => setDiasInasistencia(parseInt(e.target.value) || 0)}
+                    placeholder="ej. 2"
+                    style={INPUT_STYLE}
+                  />
+                </div>
+              </div>
+              {diasHabiles > 0 && (
+                <p style={{
+                  fontSize: 13,
+                  fontFamily: 'DM Sans, sans-serif',
+                  color: diasAsistencia >= 95 ? '#B0FF92' : diasAsistencia >= 80 ? '#F5B942' : '#F97316',
+                  margin: '0 0 16px',
+                }}>
+                  Asistencia: {diasAsistencia}% ({diasHabiles - diasInasistencia} días presentes de {diasHabiles} hábiles)
+                </p>
+              )}
+              <button
+                style={{
+                  background: '#B0FF92',
+                  color: '#121716',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '10px 20px',
+                  fontFamily: 'DM Sans, sans-serif',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Guardar asistencia
+              </button>
+            </div>
+          )}
         </div>
       </section>
 
       <div style={DIVIDER} />
 
-      {/* ── SECTION 3: Pulse Check preferences ── */}
+      {/* ── SECTION 3A: Pulse Check preferences ── */}
       <section>
         <h2 style={SECTION_TITLE}>Preferencias de Pulse Check</h2>
-        <p style={SECTION_DESC}>Personaliza cómo y cuándo se envían los Pulse Checks a tus partners.</p>
+        <p style={SECTION_DESC}>Personaliza cómo se envían los Pulse Checks a tus partners.</p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-          {/* Canal */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Canal preferido */}
           <div>
             <p style={FIELD_LABEL}>Canal preferido</p>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -438,142 +670,67 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Frecuencia */}
+          {/* Review before send toggle */}
           <div>
-            <p style={FIELD_LABEL}>Frecuencia automática por defecto</p>
-            <CustomDropdown
-              value={frecuencia} onChange={setFrecuencia}
-              options={[
-                { value: '7', label: '7 días' },
-                { value: '14', label: '14 días' },
-                { value: '30', label: '30 días' },
-                { value: 'personalizado', label: 'Personalizado' },
-              ]}
-            />
-          </div>
-
-          {/* Per-status timing */}
-          <div>
-            <p style={FIELD_LABEL}>Temporización por estado</p>
-            <p style={{ fontSize: 12, color: '#6F7876', margin: '0 0 12px', fontFamily: 'DM Sans, sans-serif' }}>
-              Personaliza la frecuencia según el estado de cada oportunidad
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {[
-                { key: 'sin_respuesta', label: 'Sin respuesta', color: '#F97316' },
-                { key: 'esperando', label: 'Esperando respuesta', color: '#7B58F8' },
-                { key: 'respondida', label: 'Respondida', color: '#B0FF92' },
-              ].map(({ key, label, color }) => (
-                <div key={key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: '#F5F7F7', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>{label}</span>
-                  </div>
-                  <CustomDropdown
-                    value={frecuenciaPerStatus[key]}
-                    onChange={v => setFrecuenciaPerStatus(prev => ({ ...prev, [key]: v }))}
-                    options={[
-                      { value: '3', label: '3 días' },
-                      { value: '5', label: '5 días' },
-                      { value: '7', label: '7 días' },
-                      { value: '14', label: '14 días' },
-                      { value: '30', label: '30 días' },
-                      { value: 'nunca', label: 'Nunca' },
-                    ]}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Transition timers */}
-          <div>
-            <p style={FIELD_LABEL}>Transiciones automáticas</p>
-            <p style={{ fontSize: 12, color: '#6F7876', margin: '0 0 12px', fontFamily: 'DM Sans, sans-serif' }}>
-              Mueve automáticamente oportunidades cuando cumpla el tiempo
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {/* Nueva → Sin respuesta */}
-              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#6F7876', flexShrink: 0 }} />
-                  <span style={{ fontSize: 13, color: '#F5F7F7', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>Nueva → Sin respuesta</span>
-                </div>
-                <p style={{ fontSize: 12, color: '#6F7876', margin: '0 0 8px', fontFamily: 'DM Sans, sans-serif' }}>
-                  Si no envío pulse check en
-                </p>
-                <input
-                  type="number"
-                  defaultValue="3"
-                  min="1"
-                  max="30"
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 8,
-                    color: '#F5F7F7',
-                    fontSize: 13,
-                    padding: '10px 12px',
-                    fontFamily: 'DM Sans, sans-serif',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <p style={{ fontSize: 12, color: '#6F7876', margin: '6px 0 0', fontFamily: 'DM Sans, sans-serif' }}>
-                  días (mín 1, máx 30)
-                </p>
+            <p style={FIELD_LABEL}>Revisión de mensajes</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '14px 0', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 11, fontWeight: 500, color: '#6F7876', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: 'DM Sans, sans-serif', margin: '0 0 4px' }}>Revisar mensajes antes de enviar automáticamente</p>
+                <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: 0 }}>Los mensajes generados con IA esperarán tu aprobación antes de enviarse</p>
               </div>
-
-              {/* Esperando → Sin respuesta */}
-              <div style={{ padding: '12px', background: 'rgba(255,255,255,0.02)', borderRadius: 8, border: '1px solid rgba(255,255,255,0.04)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#7B58F8', flexShrink: 0 }} />
-                  <span style={{ fontSize: 13, color: '#F5F7F7', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>Esperando → Sin respuesta</span>
-                </div>
-                <p style={{ fontSize: 12, color: '#6F7876', margin: '0 0 8px', fontFamily: 'DM Sans, sans-serif' }}>
-                  Si el partner no responde en
-                </p>
-                <input
-                  type="number"
-                  defaultValue="7"
-                  min="1"
-                  max="90"
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255,255,255,0.06)',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: 8,
-                    color: '#F5F7F7',
-                    fontSize: 13,
-                    padding: '10px 12px',
-                    fontFamily: 'DM Sans, sans-serif',
-                    outline: 'none',
-                    boxSizing: 'border-box',
-                  }}
-                />
-                <p style={{ fontSize: 12, color: '#6F7876', margin: '6px 0 0', fontFamily: 'DM Sans, sans-serif' }}>
-                  días (mín 1, máx 90)
-                </p>
-              </div>
+              <Toggle value={reviewBeforeSend} onChange={setReviewBeforeSend} />
             </div>
           </div>
+        </div>
+      </section>
 
-          {/* Message templates */}
-          <div>
-            <p style={FIELD_LABEL}>Mensajes predeterminados por estado</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {Object.entries(mensajes).map(([key, text]) => (
-                <MessageField
-                  key={key}
-                  label={MESSAGE_LABELS[key]}
-                  value={text}
-                  defaultValue={DEFAULT_MESSAGES[key]}
-                  onChange={v => setMensajes(prev => ({ ...prev, [key]: v }))}
-                />
-              ))}
+      <div style={DIVIDER} />
+
+      {/* ── SECTION 3B: Response window ── */}
+      <section>
+        <h2 style={SECTION_TITLE}>Ventana de respuesta del partner</h2>
+        <p style={SECTION_DESC}>Tiempo máximo de espera antes de mover una oportunidad a Sin respuesta</p>
+
+        <div>
+          <p style={FIELD_LABEL}>Días de espera</p>
+          <CustomDropdown
+            value={ventanaRespuesta}
+            onChange={v => {
+              setVentanaRespuesta(v)
+              if (v !== 'personalizado') {
+                localStorage.setItem('ventana_respuesta_partner', v)
+              }
+            }}
+            options={[
+              { value: '3', label: '3 días' },
+              { value: '5', label: '5 días' },
+              { value: '7', label: '7 días' },
+              { value: '14', label: '14 días' },
+              { value: '30', label: '30 días' },
+              { value: 'personalizado', label: 'Personalizado' },
+            ]}
+          />
+
+          {ventanaRespuesta === 'personalizado' && (
+            <div style={{ marginTop: 12 }}>
+              <input
+                type="number"
+                placeholder="Escribe los días"
+                min="1"
+                max="90"
+                style={{ ...INPUT_STYLE }}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    localStorage.setItem('ventana_respuesta_partner', e.target.value)
+                  }
+                }}
+              />
             </div>
-          </div>
+          )}
+
+          <p style={{ fontSize: 11, color: '#6F7876', margin: '12px 0 0', fontFamily: 'DM Sans, sans-serif' }}>
+            Puedes ajustar este tiempo individualmente desde cada oportunidad
+          </p>
         </div>
       </section>
 
@@ -599,7 +756,7 @@ export default function ProfilePage() {
                 <p style={{ fontSize: 14, color: '#F5F7F7', margin: '0 0 2px', fontFamily: 'DM Sans, sans-serif', fontWeight: 500 }}>{label}</p>
                 <p style={{ fontSize: 12, color: '#6F7876', margin: 0, fontFamily: 'DM Sans, sans-serif' }}>{desc}</p>
               </div>
-              <Toggle enabled={value} onChange={set} />
+              <Toggle value={value} onChange={set} />
             </div>
           ))}
 

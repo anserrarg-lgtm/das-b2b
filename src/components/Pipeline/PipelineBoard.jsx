@@ -1,16 +1,17 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Activity, Clock, AlertCircle, CheckCircle, Search, LayoutGrid, List, Upload, Download, TrendingUp, RotateCcw, Plus, Inbox } from 'lucide-react'
 import { useApp } from '../../context/AppContext'
 import { ESTADOS, ESTADO_CONFIG } from '../../data/mockData'
 import OpportunityCard from './OpportunityCard'
 import { useNavigate, useLocation } from 'react-router-dom'
+import * as XLSX from 'xlsx'
 
 const COLUMNS = [
-  { id: ESTADOS.NUEVA,           ...ESTADO_CONFIG[ESTADOS.NUEVA],           descripcion: 'Nuevas oportunidades',             icon: Plus        },
-  { id: ESTADOS.RESPONDIDA,      ...ESTADO_CONFIG[ESTADOS.RESPONDIDA],      descripcion: 'Partner respondió recientemente', icon: Activity    },
-  { id: ESTADOS.ESPERANDO,       ...ESTADO_CONFIG[ESTADOS.ESPERANDO],       descripcion: 'Pulse Check enviado',              icon: Clock       },
+  { id: ESTADOS.NUEVA,           ...ESTADO_CONFIG[ESTADOS.NUEVA],           descripcion: 'Recién agregada',                 icon: Inbox       },
   { id: ESTADOS.SIN_RESPUESTA,   ...ESTADO_CONFIG[ESTADOS.SIN_RESPUESTA],   descripcion: 'Sin actividad en 10+ días',       icon: AlertCircle },
+  { id: ESTADOS.ESPERANDO,       ...ESTADO_CONFIG[ESTADOS.ESPERANDO],       descripcion: 'Pulse Check enviado',              icon: Clock       },
+  { id: ESTADOS.RESPONDIDA,      ...ESTADO_CONFIG[ESTADOS.RESPONDIDA],      descripcion: 'Partner respondió',                icon: Activity    },
   { id: ESTADOS.VENTA_CONFIRMADA,...ESTADO_CONFIG[ESTADOS.VENTA_CONFIRMADA],descripcion: 'Venta cerrada por el partner',    icon: CheckCircle },
 ]
 
@@ -18,7 +19,6 @@ const ACTIVE_STATES = [ESTADOS.NUEVA, ESTADOS.RESPONDIDA, ESTADOS.ESPERANDO, EST
 
 const FILTER_OPTIONS = [
   { value: 'todas',                    label: 'Todas'              },
-  { value: ESTADOS.NUEVA,              label: 'Nueva'              },
   { value: ESTADOS.RESPONDIDA,         label: 'Respondida'         },
   { value: ESTADOS.ESPERANDO,          label: 'Esperando respuesta'},
   { value: ESTADOS.SIN_RESPUESTA,      label: 'Sin respuesta'      },
@@ -37,7 +37,7 @@ function formatFecha(str) {
 }
 
 export default function PipelineBoard() {
-  const { oportunidades, setSelectedOportunidad, compensacion, reactivarDesdeHistorial } = useApp()
+  const { oportunidades, setSelectedOportunidad, compensacion, reactivarDesdeHistorial, agregarOportunidad } = useApp()
   const navigate = useNavigate()
   const location = useLocation()
   const [activeFilter, setActiveFilter] = useState('todas')
@@ -45,6 +45,24 @@ export default function PipelineBoard() {
   const [viewMode, setViewMode] = useState('board') // 'board' | 'list'
   const [confirmReactivar, setConfirmReactivar] = useState(null)
   const [toastMsg, setToastMsg] = useState(null)
+  const [importModalState, setImportModalState] = useState(null) // null | 'upload' | 'processing' | 'preview'
+  const [previewData, setPreviewData] = useState(null)
+  const [importModalTab, setImportModalTab] = useState('subir') // 'subir' | 'crm' | 'manual'
+  const [showNueva, setNueva] = useState(false)
+  const [manualFormData, setManualFormData] = useState({
+    nombre: '',
+    cliente: '',
+    partner: '',
+    valor: '',
+    tipoContrato: 'Anual',
+    producto: '',
+    cantidad: '',
+    partnerEmail: '',
+    notas: '',
+  })
+  const [partnerInput, setPartnerInput] = useState('')
+  const [showPartnerSuggestions, setShowPartnerSuggestions] = useState(false)
+  const [newPartnerEmail, setNewPartnerEmail] = useState('')
 
   const isHistorial = activeFilter === 'historial'
 
@@ -61,9 +79,18 @@ export default function PipelineBoard() {
   const activeCount    = oportunidades.filter(o => ACTIVE_STATES.includes(o.estado) && !o.enEspera).length
   const enEsperaCount  = oportunidades.filter(o => o.enEspera && ACTIVE_STATES.includes(o.estado)).length
 
-  const visibleColumns = (activeFilter === 'todas' || isHistorial || activeFilter === 'en_espera')
-    ? COLUMNS
-    : COLUMNS.filter(c => c.id === activeFilter)
+  const visibleColumns = (() => {
+    let cols = []
+    if (showNueva) {
+      cols.push(COLUMNS[0]) // Nueva column first
+    }
+    if (activeFilter === 'todas' || isHistorial || activeFilter === 'en_espera') {
+      cols = cols.concat(COLUMNS.slice(1)) // Add remaining 4 columns
+    } else {
+      cols = cols.concat(COLUMNS.filter(c => c.id === activeFilter))
+    }
+    return cols
+  })()
 
   const q = searchQuery.trim().toLowerCase()
   function matchesSearch(op) {
@@ -93,6 +120,98 @@ export default function PipelineBoard() {
         : oportunidades.filter(o => o.estado === activeFilter)
 
   const listRows = filteredByStatus.filter(matchesSearch)
+
+  // Auto-transition processing state to preview after 2 seconds
+  useEffect(() => {
+    if (importModalState === 'processing') {
+      const timer = setTimeout(() => {
+        setImportModalState('preview')
+      }, 2000)
+      return () => clearTimeout(timer)
+    }
+  }, [importModalState])
+
+  const handleManualFormChange = (field, value) => {
+    setManualFormData(prev => ({ ...prev, [field]: value }))
+  }
+
+  const handleManualFormSubmit = () => {
+    if (!manualFormData.nombre.trim() || !manualFormData.cliente.trim() || !manualFormData.partner) {
+      alert('Por favor completa los campos requeridos')
+      return
+    }
+
+    const newOp = {
+      id: String(oportunidades.length + 1),
+      nombre: manualFormData.nombre,
+      cliente: manualFormData.cliente,
+      partner: manualFormData.partner,
+      valor: parseInt(manualFormData.valor) || 0,
+      tipoContrato: manualFormData.tipoContrato,
+      producto: manualFormData.producto,
+      cantidad: manualFormData.cantidad,
+      partnerEmail: manualFormData.partnerEmail,
+      estado: 'nueva',
+      ultimaActividad: new Date().toISOString().split('T')[0],
+      diasSinRespuesta: 0,
+      nota: manualFormData.notas,
+      pulseChecks: [],
+      timeline: [],
+      automatico: true,
+      proximoPulse: null,
+    }
+
+    agregarOportunidad(newOp)
+    setToastMsg('Oportunidad agregada al pipeline')
+    setImportModalState(null)
+    setImportModalTab('subir')
+    setManualFormData({ nombre: '', cliente: '', partner: '', valor: '', tipoContrato: 'Anual', producto: '', cantidad: '', partnerEmail: '', notas: '' })
+    setNewPartnerEmail('')
+    setTimeout(() => setToastMsg(null), 3000)
+  }
+
+  const partners = [...new Set(oportunidades.map(o => o.partner))].sort()
+
+  const handleImportFileSelected = (file) => {
+    setImportModalState('processing')
+  }
+
+  const handleImportConfirm = () => {
+    if (previewData) {
+      previewData.forEach(op => {
+        agregarOportunidad(op)
+      })
+      setToastMsg(`${previewData.length} oportunidades importadas exitosamente`)
+      setImportModalState(null)
+      setPreviewData(null)
+      setTimeout(() => setToastMsg(null), 3000)
+    }
+  }
+
+  const exportToExcel = (opportunities) => {
+    const data = opportunities.map(op => ({
+      'Oportunidad': op.nombre,
+      'Cliente': op.cliente,
+      'Partner': op.partner,
+      'Valor': op.valor,
+      'Contrato': op.tipoContrato,
+      'Estado': op.estado,
+      'Última actividad': op.ultimaActividad
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Pipeline')
+    XLSX.writeFile(wb, 'beacon-pipeline.xlsx')
+    setToastMsg('Pipeline exportado exitosamente')
+    setTimeout(() => setToastMsg(null), 3000)
+  }
+
+  const previewRows = [
+    { nombre: 'Renovación Azure', cliente: 'Bancolombia', partner: 'TechSolutions', valor: 45000, tipoContrato: 'Anual', estado: 'nueva' },
+    { nombre: 'Microsoft 365 E3', cliente: 'Grupo Éxito', partner: 'Nimbus Partners', valor: 28000, tipoContrato: 'Mensual', estado: 'nueva' },
+    { nombre: 'Defender Security', cliente: 'Claro Colombia', partner: 'NetCore Solutions', valor: 67000, tipoContrato: '3 años', estado: 'nueva' },
+  ]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100%' }}>
@@ -149,6 +268,10 @@ export default function PipelineBoard() {
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button
+            onClick={() => {
+              setImportModalState('upload')
+              setImportModalTab('subir')
+            }}
             style={{
               display: 'flex', alignItems: 'center', gap: 7,
               padding: '0 16px', height: 36,
@@ -164,6 +287,7 @@ export default function PipelineBoard() {
             Importar
           </button>
           <button
+            onClick={() => exportToExcel(oportunidades)}
             style={{
               display: 'flex', alignItems: 'center', gap: 7,
               padding: '0 16px', height: 36,
@@ -296,25 +420,165 @@ export default function PipelineBoard() {
 
       {/* Count + board block */}
       <div style={{ marginTop: 32 }}>
-        <p style={{ padding: '0 40px', margin: '0 0 8px', textAlign: 'right', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif' }}>
-          {isHistorial ? `${historialRows.length} en historial` : activeFilter === 'en_espera' ? `${enEsperaCount} en espera` : `${activeCount} oportunidades activas`}
-        </p>
+        <div style={{ padding: '0 40px', margin: '0 0 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <p style={{ margin: 0, fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif' }}>
+              {isHistorial ? `${historialRows.length} en historial` : activeFilter === 'en_espera' ? `${enEsperaCount} en espera` : `${activeCount} oportunidades activas`}
+            </p>
+            {!isHistorial && !['en_espera'].includes(activeFilter) && (() => {
+              const nuevaCount = byEstado[ESTADOS.NUEVA].length
+              return (
+                <button onClick={() => navigate('/nuevas')} style={{
+                  background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  padding: '6px 12px',
+                  color: '#A3AEAC',
+                  fontFamily: 'DM Sans',
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                  <Inbox size={13}/>
+                  Ver recién cargadas
+                  <span style={{
+                    background: 'rgba(255,255,255,0.08)',
+                    borderRadius: '4px',
+                    padding: '1px 6px',
+                    color: '#F5F7F7',
+                    fontFamily: 'Satoshi',
+                    fontWeight: 700,
+                    fontSize: '11px'
+                  }}>{nuevaCount}</span>
+                </button>
+              )
+            })()}
+          </div>
+        </div>
 
         {/* Board view */}
-        {!isHistorial && viewMode === 'board' && (
+        {!isHistorial && viewMode === 'board' && activeFilter === 'todas' && (
           <div style={{
             padding: '0 40px 48px',
             display: 'flex',
-            gap: 14,
+            flexDirection: 'row',
+            gap: 12,
             alignItems: 'flex-start',
+            width: '100%',
             overflowX: 'auto',
           }}>
             {visibleColumns.map(col => {
               const cards = byEstado[col.id].filter(matchesSearch)
-              return <Column key={col.id} col={col} cards={cards} />
+              const isNuevaCol = col.id === ESTADOS.NUEVA
+              return (
+                <div key={col.id} style={isNuevaCol ? {
+                  transition: 'all 0.3s ease',
+                  opacity: showNueva ? 1 : 0,
+                  width: showNueva ? 'auto' : '0px',
+                  overflow: 'hidden',
+                  flex: 1,
+                  minWidth: 0,
+                } : {
+                  flex: 1,
+                  minWidth: 0,
+                }}>
+                  <Column col={col} cards={cards} />
+                </div>
+              )
             })}
           </div>
         )}
+
+        {/* Filtered column view - when filter is not "todas" */}
+        {!isHistorial && activeFilter !== 'todas' && (() => {
+          const col = COLUMNS.find(c => c.id === activeFilter || (activeFilter === 'en_espera' && c.id === ESTADOS.ESPERANDO))
+          if (!col) return null
+
+          const cards = activeFilter === 'en_espera'
+            ? byEstado[ESTADOS.ESPERANDO]
+            : byEstado[col.id]
+
+          const filteredCards = cards.filter(matchesSearch)
+          const rgb = col.color.match(/\d+/g)?.join(',') || '123,88,248'
+
+          return (
+            <div style={{
+              padding: '0 40px 48px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-start',
+            }}>
+              {/* Column Header */}
+              <div style={{
+                marginBottom: 24,
+                paddingBottom: 16,
+                borderBottom: `1px solid rgba(${rgb},0.1)`,
+                width: '100%',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  marginBottom: 8,
+                }}>
+                  <div style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 6,
+                    background: `rgba(${rgb},0.1)`,
+                    border: `1px solid rgba(${rgb},0.2)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    {col.icon && <col.icon size={12} color={col.color} strokeWidth={1.5} />}
+                  </div>
+                  <p style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: col.color,
+                    margin: 0,
+                    fontFamily: 'DM Sans, sans-serif',
+                  }}>
+                    {col.label}
+                  </p>
+                  <p style={{
+                    fontSize: 12,
+                    color: '#6F7876',
+                    margin: 0,
+                    fontFamily: 'DM Sans, sans-serif',
+                  }}>
+                    ({filteredCards.length})
+                  </p>
+                </div>
+                <p style={{
+                  fontSize: 13,
+                  color: '#A3AEAC',
+                  margin: 0,
+                  fontFamily: 'DM Sans, sans-serif',
+                  lineHeight: 1.5,
+                }}>
+                  {col.descripcion}
+                </p>
+              </div>
+
+              {/* Cards */}
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 12,
+                maxWidth: 380,
+              }}>
+                {filteredCards.map(op => (
+                  <OpportunityCard key={op.id} oportunidad={op} />
+                ))}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* List view */}
         {!isHistorial && viewMode === 'list' && (
@@ -356,7 +620,7 @@ export default function PipelineBoard() {
               ¿Reactivar esta oportunidad?
             </h3>
             <p style={{ fontSize: 14, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 6px', lineHeight: 1.5 }}>
-              <span style={{ color: '#A3AEAC', fontWeight: 500 }}>{confirmReactivar.nombre}</span>
+              <span style={{ color: '#A3AEAC', fontWeight: 500 }}>{confirmReactivar.cliente}</span>
             </p>
             <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 24px', lineHeight: 1.5 }}>
               Volverá al pipeline como{' '}
@@ -408,6 +672,592 @@ export default function PipelineBoard() {
             {toastMsg}
           </span>
         </div>
+      )}
+
+      {/* Import Modal */}
+      {importModalState && createPortal(
+        <div
+          style={{
+            position: 'fixed', top: 0, left: 0,
+            width: '100vw', height: '100vh',
+            background: 'rgba(0,0,0,0.75)',
+            zIndex: 99999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}
+          onClick={() => importModalState === 'upload' && setImportModalState(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: '520px',
+              background: 'rgba(18,23,22,0.97)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRadius: '12px',
+              padding: '28px',
+              backdropFilter: 'blur(24px)',
+              overflowY: 'auto',
+              maxHeight: '90vh',
+            }}
+          >
+            {/* TAB NAVIGATION */}
+            {importModalState === 'upload' && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 28, background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: 4 }}>
+                {[
+                  { id: 'subir', label: 'Subir archivo' },
+                  { id: 'crm', label: 'Conectar CRM' },
+                  { id: 'manual', label: 'Agregar manualmente' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setImportModalTab(tab.id)}
+                    style={{
+                      flex: 1,
+                      padding: '8px 12px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: importModalTab === tab.id ? 'rgba(176,255,146,0.12)' : 'transparent',
+                      color: importModalTab === tab.id ? '#B0FF92' : '#A3AEAC',
+                      fontSize: 12,
+                      fontFamily: 'DM Sans, sans-serif',
+                      fontWeight: 500,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                    onMouseEnter={e => { if (importModalTab !== tab.id) e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                    onMouseLeave={e => { if (importModalTab !== tab.id) e.currentTarget.style.background = 'transparent' }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* TAB 1 — SUBIR ARCHIVO */}
+            {importModalState === 'upload' && importModalTab === 'subir' && (
+              <>
+                {/* UPLOAD STATES */}
+                {!['processing', 'preview'].includes(importModalState) && (
+                  <>
+                    <h2 className="font-clash" style={{ fontSize: 18, fontWeight: 700, color: '#F5F7F7', margin: '0 0 8px', letterSpacing: '-0.02em' }}>
+                      Importar oportunidades
+                    </h2>
+                    <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 20px' }}>
+                      Sube un archivo CSV o Excel con tus oportunidades activas
+                    </p>
+
+                    <div
+                      onClick={() => setImportModalState('processing')}
+                      style={{
+                        border: '2px dashed rgba(255,255,255,0.1)',
+                        borderRadius: '12px',
+                        padding: '40px',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        marginBottom: 20,
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.background = 'rgba(255,255,255,0.02)' }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.background = 'transparent' }}
+                    >
+                      <Upload size={32} color="#6F7876" style={{ margin: '0 auto 12px', display: 'block' }} />
+                      <p style={{ fontSize: 14, color: '#A3AEAC', fontFamily: 'DM Sans, sans-serif', margin: 0 }}>Arrastra tu archivo aquí</p>
+                      <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '4px 0' }}>o</p>
+                      <button
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid rgba(255,255,255,0.15)',
+                          borderRadius: '6px',
+                          padding: '6px 12px',
+                          color: '#F5F7F7',
+                          fontSize: 13,
+                          fontFamily: 'DM Sans, sans-serif',
+                          cursor: 'pointer',
+                          marginTop: 8,
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.25)'; e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.background = 'transparent' }}
+                      >
+                        Seleccionar archivo
+                      </button>
+                    </div>
+
+                    <p style={{ fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: 0 }}>
+                      Columnas requeridas: Cliente, Partner, Correo del partner, Valor, Contrato, Producto, Cantidad
+                    </p>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* TAB 2 — CONECTAR CRM */}
+            {importModalState === 'upload' && importModalTab === 'crm' && (
+              <>
+                <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 8px' }}>
+                  Conecta tu CRM
+                </p>
+                <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 20px' }}>
+                  Importa tus oportunidades directamente desde tu plataforma de ventas
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12 }}>
+                  {[
+                    { name: 'Salesforce', logo: 'SF', color: '#00A1E0', desc: 'Importa oportunidades y contactos desde tu CRM' },
+                    { name: 'HubSpot', logo: 'HS', color: '#FF7A59', desc: 'Sincroniza deals y pipelines desde HubSpot' },
+                    { name: 'Dynamics 365', logo: 'D365', color: '#742774', desc: 'Conecta con el ecosistema Microsoft de tu empresa' },
+                  ].map(crm => (
+                    <div
+                      key={crm.name}
+                      style={{
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.06)',
+                        borderRadius: '10px',
+                        padding: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '50px',
+                          height: '50px',
+                          borderRadius: '8px',
+                          background: `rgba(${crm.color === '#00A1E0' ? '0,161,224' : crm.color === '#FF7A59' ? '255,122,89' : '116,39,116'},0.1)`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                        }}
+                      >
+                        <span style={{ fontSize: 13, fontWeight: 700, color: crm.color, fontFamily: 'DM Sans, sans-serif' }}>
+                          {crm.logo}
+                        </span>
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <p className="font-clash" style={{ fontSize: 15, fontWeight: 700, color: '#F5F7F7', margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+                          {crm.name}
+                        </p>
+                        <p style={{ fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: 0 }}>
+                          {crm.desc}
+                        </p>
+                      </div>
+                      <button
+                        style={{
+                          padding: '6px 14px',
+                          borderRadius: '6px',
+                          border: 'none',
+                          background: 'rgba(255,255,255,0.08)',
+                          color: '#A3AEAC',
+                          fontSize: 12,
+                          fontFamily: 'DM Sans, sans-serif',
+                          cursor: 'default',
+                          whiteSpace: 'nowrap',
+                          transition: 'all 0.15s',
+                          flexShrink: 0,
+                          opacity: 0.6,
+                        }}
+                      >
+                        Conectar
+                      </button>
+                      <div
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: 'rgba(245,185,66,0.1)',
+                          border: '1px solid rgba(245,185,66,0.2)',
+                          fontSize: 11,
+                          color: '#F5B942',
+                          fontFamily: 'DM Sans, sans-serif',
+                          whiteSpace: 'nowrap',
+                          flexShrink: 0,
+                        }}
+                      >
+                        Próximamente
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* TAB 3 — AGREGAR MANUALMENTE */}
+            {importModalState === 'upload' && importModalTab === 'manual' && (
+              <>
+                <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 20px' }}>
+                  Nueva oportunidad
+                </p>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* Cliente */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, fontWeight: 500 }}>
+                      Cliente *
+                    </label>
+                    <input
+                      type="text"
+                      value={manualFormData.cliente}
+                      onChange={e => handleManualFormChange('cliente', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 8,
+                        color: '#F5F7F7',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {/* Partner */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, fontWeight: 500 }}>
+                      Partner *
+                    </label>
+                    <div style={{position: 'relative'}}>
+                      <input
+                        value={partnerInput}
+                        onChange={(e) => {
+                          setPartnerInput(e.target.value)
+                          setManualFormData({ ...manualFormData, partner: e.target.value })
+                          setShowPartnerSuggestions(e.target.value.length > 0)
+                        }}
+                        onBlur={() => setTimeout(() => setShowPartnerSuggestions(false), 200)}
+                        placeholder="Nombre del partner"
+                        style={{
+                          width: '100%',
+                          background: 'rgba(255,255,255,0.04)',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                          borderRadius: '8px',
+                          padding: '10px 14px',
+                          color: '#F5F7F7',
+                          fontFamily: 'DM Sans',
+                          fontSize: '14px',
+                          boxSizing: 'border-box',
+                          outline: 'none'
+                        }}
+                      />
+                      {showPartnerSuggestions && (() => {
+                        const partnerList = [...new Set(oportunidades.map(o => o.partner))]
+                        const filteredPartners = partnerList.filter(p =>
+                          p.toLowerCase().includes(partnerInput.toLowerCase())
+                        )
+                        return filteredPartners.length > 0 && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            right: 0,
+                            background: '#1A1F1E',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: '8px',
+                            zIndex: 9999,
+                            marginTop: '4px',
+                            overflow: 'hidden'
+                          }}>
+                            {filteredPartners.map(partner => (
+                              <div
+                                key={partner}
+                                onMouseDown={() => {
+                                  setPartnerInput(partner)
+                                  setManualFormData({ ...manualFormData, partner })
+                                  setShowPartnerSuggestions(false)
+                                }}
+                                style={{
+                                  padding: '10px 14px',
+                                  cursor: 'pointer',
+                                  color: '#A3AEAC',
+                                  fontFamily: 'DM Sans',
+                                  fontSize: '13px'
+                                }}
+                                onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+                                onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                              >
+                                {partner}
+                              </div>
+                            ))}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Correo del partner */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, fontWeight: 500 }}>
+                      Correo del partner
+                    </label>
+                    <input
+                      type="email"
+                      value={manualFormData.partnerEmail}
+                      onChange={e => handleManualFormChange('partnerEmail', e.target.value)}
+                      placeholder="ej. contacto@partner.com"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 8,
+                        color: '#F5F7F7',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {/* Valor */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, fontWeight: 500 }}>
+                      Valor del contrato (USD)
+                    </label>
+                    <input
+                      type="number"
+                      value={manualFormData.valor}
+                      onChange={e => handleManualFormChange('valor', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 8,
+                        color: '#F5F7F7',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {/* Tipo de contrato */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, fontWeight: 500 }}>
+                      Tipo de contrato
+                    </label>
+                    <select
+                      value={manualFormData.tipoContrato}
+                      onChange={e => handleManualFormChange('tipoContrato', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 8,
+                        color: '#F5F7F7',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <option>Mensual</option>
+                      <option>Anual</option>
+                      <option>3 años</option>
+                    </select>
+                  </div>
+
+                  {/* Producto */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, fontWeight: 500 }}>
+                      Producto
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej. WorkSpace Pro"
+                      value={manualFormData.producto}
+                      onChange={e => handleManualFormChange('producto', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 8,
+                        color: '#F5F7F7',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {/* Cantidad */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, fontWeight: 500 }}>
+                      Cantidad
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ej. 50 licencias"
+                      value={manualFormData.cantidad}
+                      onChange={e => handleManualFormChange('cantidad', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 8,
+                        color: '#F5F7F7',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                      }}
+                    />
+                  </div>
+
+                  {/* Notas */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: 12, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', marginBottom: 6, fontWeight: 500 }}>
+                      Notas iniciales
+                    </label>
+                    <textarea
+                      value={manualFormData.notas}
+                      onChange={e => handleManualFormChange('notas', e.target.value)}
+                      placeholder="Contexto de la oportunidad..."
+                      style={{
+                        width: '100%',
+                        minHeight: '60px',
+                        padding: '10px 12px',
+                        background: 'rgba(255,255,255,0.04)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 8,
+                        color: '#F5F7F7',
+                        fontSize: 13,
+                        fontFamily: 'DM Sans, sans-serif',
+                        outline: 'none',
+                        boxSizing: 'border-box',
+                        resize: 'vertical',
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
+                  <button
+                    onClick={() => setImportModalState(null)}
+                    style={{
+                      padding: '9px 18px', borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'transparent', color: '#A3AEAC',
+                      fontSize: 13, fontFamily: 'DM Sans, sans-serif',
+                      cursor: 'pointer', transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleManualFormSubmit}
+                    style={{
+                      padding: '9px 18px', borderRadius: 8,
+                      border: 'none', background: '#B0FF92',
+                      color: '#121716', fontSize: 13, fontWeight: 600,
+                      fontFamily: 'DM Sans, sans-serif', cursor: 'pointer',
+                      transition: 'opacity 0.15s'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                  >
+                    Agregar oportunidad
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* PROCESSING STATE */}
+            {importModalState === 'processing' && (
+              <div style={{ textAlign: 'center', padding: '40px 0' }}>
+                <div
+                  style={{
+                    width: '40px', height: '40px',
+                    border: '3px solid rgba(176,255,146,0.2)',
+                    borderTop: '3px solid #B0FF92',
+                    borderRadius: '50%',
+                    margin: '0 auto 16px',
+                    animation: 'spin 1s linear infinite',
+                  }}
+                />
+                <p style={{ fontSize: 14, color: '#A3AEAC', fontFamily: 'DM Sans, sans-serif', margin: 0 }}>
+                  Procesando archivo...
+                </p>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              </div>
+            )}
+
+            {/* PREVIEW STATE */}
+            {importModalState === 'preview' && (
+              <>
+                <h2 className="font-clash" style={{ fontSize: 18, fontWeight: 700, color: '#F5F7F7', margin: '0 0 20px', letterSpacing: '-0.02em' }}>
+                  3 oportunidades encontradas
+                </h2>
+
+                <div style={{ overflowX: 'auto', marginBottom: 24 }}>
+                  <div style={{ display: 'flex', gap: 24, paddingBottom: 12, fontSize: 11, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', fontWeight: 500, textTransform: 'uppercase', borderBottom: '1px solid rgba(255,255,255,0.04)', marginBottom: 12 }}>
+                    <div style={{ flex: '1 0 140px' }}>Oportunidad</div>
+                    <div style={{ flex: '1 0 120px' }}>Cliente</div>
+                    <div style={{ flex: '1 0 120px' }}>Partner</div>
+                    <div style={{ flex: '0 0 80px' }}>Valor</div>
+                    <div style={{ flex: '0 0 70px' }}>Contrato</div>
+                  </div>
+
+                  {previewRows.map((row, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 24, paddingBottom: 12, paddingTop: 12, fontSize: 13, color: '#F5F7F7', fontFamily: 'DM Sans, sans-serif', borderBottom: i < previewRows.length - 1 ? '1px solid rgba(255,255,255,0.04)' : 'none' }}>
+                      <div style={{ flex: '1 0 140px', minWidth: 0 }}>{row.nombre}</div>
+                      <div style={{ flex: '1 0 120px', minWidth: 0 }}>{row.cliente}</div>
+                      <div style={{ flex: '1 0 120px', minWidth: 0 }}>{row.partner}</div>
+                      <div style={{ flex: '0 0 80px' }}>${(row.valor / 1000).toFixed(0)}K</div>
+                      <div style={{ flex: '0 0 70px' }}>{row.tipoContrato}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button
+                    onClick={() => setImportModalState(null)}
+                    style={{
+                      padding: '9px 18px', borderRadius: 8,
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      background: 'transparent', color: '#A3AEAC',
+                      fontSize: 13, fontFamily: 'DM Sans, sans-serif',
+                      cursor: 'pointer', transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.color = '#F5F7F7'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)' }}
+                    onMouseLeave={e => { e.currentTarget.style.color = '#A3AEAC'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)' }}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => {
+                      setPreviewData(previewRows)
+                      handleImportConfirm()
+                    }}
+                    style={{
+                      padding: '9px 18px', borderRadius: 8,
+                      border: 'none', background: '#B0FF92',
+                      color: '#121716', fontSize: 13, fontWeight: 600,
+                      fontFamily: 'DM Sans, sans-serif', cursor: 'pointer',
+                      transition: 'opacity 0.15s'
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.opacity = '0.88' }}
+                    onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
+                  >
+                    Importar 3 oportunidades
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   )
@@ -614,12 +1464,13 @@ function Column({ col, cards }) {
   const totalValue = cards.reduce((sum, c) => sum + c.valor, 0)
   const rgb = hexToRgb(col.color)
   const Icon = col.icon
+  const isNueva = col.id === ESTADOS.NUEVA
+  const labelColor = isNueva ? '#C8CDD0' : col.color
 
   return (
     <div style={{
-      flex: '1 1 0',
-      minWidth: 220,
-      maxWidth: 280,
+      flex: 1,
+      minWidth: 240,
       display: 'flex',
       flexDirection: 'column',
       background: 'rgba(255,255,255,0.03)',
@@ -630,41 +1481,55 @@ function Column({ col, cards }) {
       {/* Colored status header — label + description + value all inside accent container */}
       <div style={{
         padding: '10px 14px',
-        background: `rgba(${rgb},0.1)`,
-        border: `1px solid rgba(${rgb},0.4)`,
+        background: isNueva ? 'rgba(255,255,255,0.09)' : `rgba(${rgb},0.1)`,
+        border: isNueva ? '1px solid rgba(255,255,255,0.25)' : `1px solid rgba(${rgb},0.4)`,
         borderRadius: 8,
         margin: '10px 10px 0',
-        boxShadow: `0 0 8px rgba(${rgb},0.2)`,
+        boxShadow: isNueva ? '0 0 8px rgba(255,255,255,0.1)' : `0 0 8px rgba(${rgb},0.2)`,
         minHeight: 80,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-start',
         justifyContent: 'space-between',
+        boxSizing: 'border-box',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <Icon size={13} color={col.color} strokeWidth={1.5} />
-          <span className="font-clash" style={{
-            fontSize: 14, color: col.color,
-            letterSpacing: '0.05em', flex: 1,
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            alignSelf: 'baseline',
+            position: 'relative',
+            top: 1,
+          }}>
+            <Icon size={13} color={labelColor} strokeWidth={1.5} />
+          </div>
+          <span style={{
+            fontSize: 13,
+            fontFamily: "'Satoshi', sans-serif",
+            fontWeight: 700,
+            color: labelColor,
+            letterSpacing: '0.05em',
+            flex: 1,
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            lineHeight: 1,
           }}>
             {col.label}
           </span>
           <span style={{
-            fontSize: 11, fontWeight: 700, color: col.color,
+            fontSize: 11,
+            fontWeight: 700,
+            color: labelColor,
+            lineHeight: 1,
+            whiteSpace: 'nowrap',
           }}>
             {cards.length}
           </span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 7 }}>
-          <p style={{ fontSize: 11, color: `rgba(${rgb},0.7)`, margin: 0, fontFamily: 'DM Sans, sans-serif' }}>
-            {col.descripcion}
-          </p>
-          {cards.length > 0 && (
-            <p style={{ fontSize: 11, margin: 0, fontFamily: 'Satoshi, sans-serif', fontWeight: 600, color: `rgba(${rgb},0.65)` }}>
-              {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(totalValue)}
-            </p>
-          )}
-        </div>
+        <p style={{ fontSize: 11, color: `rgba(${rgb},0.7)`, margin: 0, fontFamily: 'DM Sans, sans-serif', marginTop: 7 }}>
+          {col.descripcion}
+        </p>
       </div>
 
       {/* Cards — neutral, no color treatment */}
@@ -673,6 +1538,7 @@ function Column({ col, cards }) {
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
+        boxSizing: 'border-box',
       }}>
         {cards.length === 0 ? (
           <div style={{ padding: '24px 16px', textAlign: 'center' }}>
@@ -747,7 +1613,7 @@ function ListView({ rows, onSelect }) {
             {/* Name + client */}
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 500, color: '#F5F7F7', margin: 0, fontFamily: 'DM Sans, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {op.nombre}
+                {op.cliente}
               </p>
               <p style={{ fontSize: 11, color: '#6F7876', margin: '2px 0 0', fontFamily: 'DM Sans, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {op.cliente}
@@ -807,20 +1673,45 @@ function HistorialView({ rows, onSelect, onReactivar }) {
 
       {rows.map(op => {
         const isGanada = op.estado === 'ganada'
-        const color    = isGanada ? '#B0FF92' : '#FF6B6B'
+        const color    = isGanada ? '#B0FF92' : '#F97316'
         const label    = isGanada ? 'Ganada' : 'Descalificada'
         const rgb      = hexToRgb(color)
         return (
           <div
             key={op.id}
             onClick={() => onSelect(op)}
-            style={{ display: 'grid', gridTemplateColumns: '2fr 1.2fr 110px 110px 90px 100px', gap: 12, padding: '13px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, cursor: 'pointer', transition: 'all 0.15s ease', alignItems: 'center' }}
-            onMouseEnter={e => { e.currentTarget.style.background = `rgba(${rgb},0.04)`; e.currentTarget.style.borderColor = `rgba(${rgb},0.15)`; e.currentTarget.style.transform = 'translateX(2px)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'; e.currentTarget.style.transform = 'translateX(0)' }}
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '2fr 1.2fr 110px 110px 90px 100px',
+              gap: 12,
+              padding: '13px 16px',
+              background: isGanada ? 'rgba(255,255,255,0.03)' : 'rgba(249,115,22,0.1)',
+              border: isGanada ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(249,115,22,0.3)',
+              borderRadius: 10,
+              cursor: 'pointer',
+              transition: 'all 0.15s ease',
+              alignItems: 'center'
+            }}
+            onMouseEnter={e => {
+              if (!isGanada) {
+                e.currentTarget.style.borderColor = 'rgba(249,115,22,0.6)'
+                e.currentTarget.style.boxShadow = '0 0 16px rgba(249,115,22,0.2)'
+              } else {
+                e.currentTarget.style.background = `rgba(${rgb},0.04)`
+                e.currentTarget.style.borderColor = `rgba(${rgb},0.15)`
+              }
+              e.currentTarget.style.transform = 'translateX(2px)'
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'
+              e.currentTarget.style.boxShadow = 'none'
+              e.currentTarget.style.transform = 'translateX(0)'
+            }}
           >
             <div style={{ minWidth: 0 }}>
               <p style={{ fontSize: 13, fontWeight: 500, color: '#F5F7F7', margin: 0, fontFamily: 'DM Sans, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {op.nombre}
+                {op.cliente}
               </p>
               <p style={{ fontSize: 11, color: '#6F7876', margin: '2px 0 0', fontFamily: 'DM Sans, sans-serif', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {op.cliente}

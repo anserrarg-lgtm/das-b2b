@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useApp } from '../context/AppContext'
-import { AlertCircle, CheckCircle, Send, MessageCircle, Bell, RotateCcw } from 'lucide-react'
+import { AlertCircle, CheckCircle, Send, MessageCircle, Bell, RotateCcw, PlayCircle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 const TIPO_CONFIG = {
@@ -29,6 +29,12 @@ const TIPO_CONFIG = {
     bg: 'rgba(245,185,66,0.1)',
     icon: MessageCircle,
   },
+  reactivada: {
+    label: 'Oportunidad reactivada',
+    color: '#8B9BAD',
+    bg: 'rgba(139,155,173,0.1)',
+    icon: PlayCircle,
+  },
 }
 
 const KNOWN_TYPES = Object.keys(TIPO_CONFIG)
@@ -39,6 +45,7 @@ const FILTER_TABS = [
   { key: 'pulse_enviado',      label: 'Pulse enviado'      },
   { key: 'partner_respondio',  label: 'Partner respondió'  },
   { key: 'venta_confirmada',   label: 'Venta confirmada'   },
+  { key: 'reactivada',         label: 'Reactivadas'        },
   { key: 'respuesta_historial', label: 'Historial'         },
 ]
 
@@ -497,7 +504,7 @@ export default function NotificationCenter() {
               ¿Reactivar esta oportunidad?
             </h3>
             <p style={{ fontSize: 14, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 6px', lineHeight: 1.5 }}>
-              <span style={{ color: '#A3AEAC', fontWeight: 500 }}>{confirmReactivar.op.nombre}</span>
+              <span style={{ color: '#A3AEAC', fontWeight: 500 }}>{confirmReactivar.op.cliente}</span>
             </p>
             <p style={{ fontSize: 13, color: '#6F7876', fontFamily: 'DM Sans, sans-serif', margin: '0 0 24px', lineHeight: 1.5 }}>
               Volverá al pipeline como{' '}
