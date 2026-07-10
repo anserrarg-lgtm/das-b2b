@@ -854,34 +854,12 @@ export default function LandingPage() {
             { title: 'Empresas tech con ventas indirectas', description: 'Compañías que venden a través de canales de distribución y necesitan que sus CAMs operen con información completa y actualizada.' },
             { title: 'Equipos de ventas indirectas', description: 'Equipos que buscan reducir el tiempo de seguimiento manual y garantizar que ninguna atribución se pierda por falta de visibilidad.' }
           ].map((item, i) => (
-            <div key={i} style={{
-              display: 'flex',
-              gap: '80px',
-              alignItems: 'flex-start',
-              paddingTop: '32px',
-              paddingBottom: '32px',
-              borderBottom: i < 2 ? '1px solid rgba(255,255,255,0.06)' : 'none'
-            }}>
-              <p style={{
-                fontFamily:"'Satoshi', sans-serif",
-                fontWeight: 600,
-                fontSize: '22px',
-                color: '#F5F7F7',
-                margin: 0,
-                flex: '0 0 280px'
-              }}>
-                {item.title}
-              </p>
-              <p style={{
-                fontFamily: 'DM Sans',
-                fontSize: '15px',
-                color: '#6F7876',
-                lineHeight: 1.7,
-                margin: 0,
-                flex: 1
-              }}>
-                {item.description}
-              </p>
+            <div key={i} style={{display:'flex', gap:'80px', alignItems:'flex-start', paddingTop:'32px', paddingBottom:'32px', borderBottom: i < 2 ? '1px solid rgba(255,255,255,0.06)' : 'none'}}>
+              <div style={{flex:'0 0 280px'}}>
+                <div style={{width:'8px', height:'8px', borderRadius:'50%', background:'#B0FF92', boxShadow:'0 0 0 2px rgba(176,255,146,0.2), 0 0 8px 3px rgba(176,255,146,0.4)', marginBottom:'12px'}} />
+                <p style={{fontFamily:"'Satoshi', sans-serif", fontWeight:600, fontSize:'22px', color:'#F5F7F7', margin:0}}>{item.title}</p>
+              </div>
+              <p style={{fontFamily:'DM Sans', fontSize:'15px', color:'#6F7876', lineHeight:1.7, margin:0, flex:1}}>{item.description}</p>
             </div>
           ))}
         </div>
