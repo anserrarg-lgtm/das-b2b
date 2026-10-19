@@ -183,32 +183,6 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }) {
         })}
       </nav>
 
-      {/* Ver demo button */}
-      <div style={{ padding: '12px 12px 8px 12px' }}>
-        <button
-          onClick={() => navigate('/pipeline')}
-          style={{
-            width: '100%',
-            background: '#B0FF92',
-            color: '#121716',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '10px 12px',
-            fontFamily: 'DM Sans, sans-serif',
-            fontSize: '14px',
-            fontWeight: 500,
-            cursor: 'pointer',
-            transition: 'all 0.2s ease',
-            opacity: isCollapsed ? 0 : 1,
-            pointerEvents: isCollapsed ? 'none' : 'auto',
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = '#A8EE7C'}
-          onMouseLeave={e => e.currentTarget.style.background = '#B0FF92'}
-        >
-          Ver demo
-        </button>
-      </div>
-
       {/* User */}
       <div style={{ padding: '12px', borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: 12 }}>
         <NavLink
