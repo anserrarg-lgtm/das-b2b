@@ -1345,8 +1345,14 @@ function BonoCard({ oportunidades, compensacion }) {
       <p className="font-clash" style={{ fontSize: 11, color: '#A3AEAC', margin: 0, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
         {title}
       </p>
-      <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, background: 'rgba(176,255,146,0.1)', boxShadow: '0 0 8px rgba(176,255,146,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <TrendingUp size={28} color="#B0FF92" strokeWidth={1.5} />
+      {/* 2026-10-19, a pedido de Ana: este ícono (y el link "Ir al perfil" más
+        * abajo) usaban el verde de marca #B0FF92, el mismo color que las
+        * demás tarjetas de estado del pipeline (ganada/respondida, etc.) de
+        * la fila justo al lado -- se confundía visualmente con esas.
+        * Esta tarjeta es informativa/de configuración, no un estado del
+        * pipeline, así que pasa a blanco neutro para distinguirse. */}
+      <div style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0, background: 'rgba(245,247,247,0.08)', boxShadow: '0 0 8px rgba(245,247,247,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <TrendingUp size={28} color="#F5F7F7" strokeWidth={1.5} />
       </div>
     </div>
   )
@@ -1357,7 +1363,7 @@ function BonoCard({ oportunidades, compensacion }) {
         {topRow}
         <p style={{ fontSize: 12, color: '#6F7876', margin: 'auto 0 0', fontFamily: 'DM Sans, sans-serif', lineHeight: 1.6 }}>
           Configura tu cuota en Perfil para ver tu rendimiento mensual.{' '}
-          <span onClick={() => navigate('/perfil')} style={{ color: '#B0FF92', cursor: 'pointer' }}>
+          <span onClick={() => navigate('/perfil')} style={{ color: '#F5F7F7', cursor: 'pointer' }}>
             Ir al perfil →
           </span>
         </p>

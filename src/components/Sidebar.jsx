@@ -3,8 +3,15 @@ import { LayoutGrid, Bell, Upload, Users } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { useState } from 'react'
 
+// 2026-10-19, a pedido de Ana: el ícono de Pipeline (los 4 bloquecitos)
+// apuntaba a "/", que App.jsx trata como la landing -- al hacerle click
+// desde dentro de la app (sidebar colapsada o no) te sacaba a la landing
+// en vez de llevarte al pipeline real. Ahora apunta a "/pipeline", que es
+// donde vive de verdad PipelineBoard. De paso esto arregla que el ítem
+// nunca se marcaba como activo estando en /pipeline (la comparación de
+// abajo exigía location.pathname === '/' exacto).
 const navItems = [
-  { path: '/', label: 'Pipeline', icon: LayoutGrid },
+  { path: '/pipeline', label: 'Pipeline', icon: LayoutGrid },
   { path: '/partners', label: 'Partners', icon: Users },
   { path: '/notificaciones', label: 'Notificaciones', icon: Bell },
 ]
@@ -35,7 +42,10 @@ export default function Sidebar({ isCollapsed, setIsCollapsed }) {
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'space-between', width: '100%', padding: '16px' }}>
         {!isCollapsed && (
-          <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', cursor: 'pointer' }}>
+          // 2026-10-19, a pedido de Ana: mismo caso que el ítem de Pipeline --
+          // el logo apuntaba a "/" (landing). Lo único que debe llevar a la
+          // landing es recargar la página, así que ahora va a "/pipeline".
+          <Link to="/pipeline" style={{ display: 'flex', alignItems: 'center', gap: 10, textDecoration: 'none', cursor: 'pointer' }}>
             <BeaconLogo />
             <span style={{ fontFamily: "'Satoshi', sans-serif", fontWeight: 700, fontSize: 20, color: '#F5F7F7', letterSpacing: '0.02em' }}>Beacon</span>
           </Link>

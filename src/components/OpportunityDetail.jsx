@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { ArrowLeft, Send, StickyNote, ToggleLeft, ToggleRight, CheckCircle2, CheckCircle, MessageSquare, Clock, Plus, XCircle, MessageCircle, ChevronDown, ChevronLeft, ChevronRight, Maximize2, PauseCircle, Settings2, Sparkles, Mail } from 'lucide-react'
+import { ArrowLeft, Send, StickyNote, ToggleLeft, ToggleRight, CheckCircle2, CheckCircle, MessageSquare, Clock, Plus, XCircle, MessageCircle, ChevronDown, ChevronRight, Maximize2, PauseCircle, Settings2, Sparkles, Mail } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { ESTADO_CONFIG } from '../data/mockData'
 import { useState, useEffect, useRef } from 'react'
@@ -205,26 +205,10 @@ export default function OpportunityDetail({ isSidebarCollapsed = false }) {
 
   return (
     <div className="opportunity-detail-container" style={{ padding: '32px', maxWidth: 960, margin: '0 auto' }}>
-      {/* Back nav */}
-      <button
-        onClick={() => navigate(-1)}
-        style={{
-          color: '#A3AEAC',
-          fontSize: '14px',
-          fontFamily: 'DM Sans, sans-serif',
-          marginBottom: '24px',
-          padding: 0,
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px'
-        }}
-      >
-        <ChevronLeft size={16} />
-        Pipeline
-      </button>
+      {/* 2026-10-19, a pedido de Ana: se quitó el botón "< Pipeline" de back-nav
+        * de acá -- en desktop (único breakpoint soportado, ver App.jsx) ese
+        * rol ya lo cumple la flecha de atrás del navegador, así que era
+        * redundante tener una propia dentro de la app. */}
 
       {/* Title section */}
       <div style={{ marginBottom: 32 }}>

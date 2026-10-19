@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { AppProvider } from './context/AppContext'
 import Sidebar from './components/Sidebar'
 import PipelineBoard from './components/Pipeline/PipelineBoard'
@@ -15,7 +15,26 @@ import { useState, useEffect } from 'react'
 
 function AppContent({ isCollapsed, setIsCollapsed }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const isLanding = location.pathname === '/'
+
+  // 2026-10-19, a pedido de Ana: la única forma de volver a la landing desde
+  // cualquier página de la app debe ser un reload real del navegador (F5,
+  // el botón de recargar, o Ctrl/Cmd+Shift+R) -- nunca con atrás/adelante ni
+  // con navegación interna (ver fix del ícono de Pipeline y el logo en
+  // Sidebar.jsx, que antes hacían esto por accidente). La Navigation Timing
+  // API sí distingue un reload real ("reload") de atrás/adelante
+  // ("back_forward") y de una carga normal ("navigate"), así que se usa esa
+  // para detectarlo. Este efecto corre una sola vez por carga real de la
+  // página (AppContent no se vuelve a montar en la navegación interna de la
+  // SPA), que es justo cuando queremos chequear esto.
+  useEffect(() => {
+    const navEntry = performance.getEntriesByType('navigation')[0]
+    const isRealReload = navEntry?.type === 'reload'
+    if (isRealReload && location.pathname !== '/') {
+      navigate('/', { replace: true })
+    }
+  }, [])
 
   return (
     <>

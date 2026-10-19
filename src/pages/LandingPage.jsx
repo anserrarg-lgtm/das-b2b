@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { ChevronRight, ArrowDown } from 'lucide-react'
 import { oportunidades as mockOps } from '../data/mockData'
 import captureHero from '../assets/capture-hero.png'
@@ -30,9 +30,27 @@ export default function LandingPage() {
   const navigate = useNavigate()
   const [currentStep, setCurrentStep] = useState(0)
   const [autoPlay, setAutoPlay] = useState(true)
+  // 2026-10-19, a pedido de Ana: el carrusel de "Una op. Tres estados..."
+  // arrancaba apenas cargaba la página entera, no cuando se llegaba
+  // scrolleando a esa sección -- para cuando el usuario de verdad bajaba
+  // hasta ahí, el auto-avance (cada 3s) ya lo había dejado en el paso 3
+  // (venta_confirmada). Ahora el auto-avance queda en pausa hasta que la
+  // sección entra al viewport (ver IntersectionObserver más abajo).
+  const [hasEnteredSlider, setHasEnteredSlider] = useState(false)
+  const sliderSectionRef = useRef(null)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [animStep, setAnimStep] = useState(0)
   const [animBlur, setAnimBlur] = useState(false)
+
+  // 2026-10-19, a pedido de Ana: las 3 métricas ("13.3 hrs", "3 de 10",
+  // "100%") cuentan hacia arriba desde 0 hasta su valor real, una por una
+  // (primero la de la izquierda, cuando termina arranca la del medio, y
+  // así), en vez de aparecer ya escritas. Arranca cuando la sección de
+  // métricas entra bien a la pantalla (ver IntersectionObserver abajo), no
+  // apenas carga la página.
+  const [metricsStarted, setMetricsStarted] = useState(false)
+  const [metricValues, setMetricValues] = useState([0, 0, 0])
+  const metricsSectionRef = useRef(null)
 
   const steps = [
     {
@@ -80,7 +98,77 @@ export default function LandingPage() {
   ]
 
   useEffect(() => {
-    if (!autoPlay) return
+    const el = sliderSectionRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setHasEnteredSlider(true)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.2 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  // 2026-10-19, a pedido de Ana: threshold más alto (0.35) que el del slider
+  // de arriba (0.2) -- quiere que el contador arranque cuando la sección de
+  // métricas ya "entró bien" a la pantalla (el título "Basado en usuarios
+  // beta" ya bien posicionado arriba), no apenas se asoma un pixel.
+  useEffect(() => {
+    const el = metricsSectionRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setMetricsStarted(true)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.35 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  // 2026-10-19, a pedido de Ana: las 3 métricas cuentan juntas, al mismo
+  // tiempo (no una después de la otra) -- ~1.2s cada una, con un ease-out
+  // para que desaceleren al llegar al número final en vez de parar en seco.
+  useEffect(() => {
+    if (!metricsStarted) return
+    const targets = [13.3, 3, 100]
+    const duration = 1200
+    let cancelled = false
+    const rafIds = []
+
+    targets.forEach((target, index) => {
+      const startTime = performance.now()
+      function tick(now) {
+        if (cancelled) return
+        const progress = Math.min((now - startTime) / duration, 1)
+        const eased = 1 - Math.pow(1 - progress, 3)
+        setMetricValues(prev => {
+          const next = [...prev]
+          next[index] = target * eased
+          return next
+        })
+        if (progress < 1) {
+          rafIds[index] = requestAnimationFrame(tick)
+        }
+      }
+      rafIds[index] = requestAnimationFrame(tick)
+    })
+
+    return () => {
+      cancelled = true
+      rafIds.forEach(id => id && cancelAnimationFrame(id))
+    }
+  }, [metricsStarted])
+
+  useEffect(() => {
+    if (!autoPlay || !hasEnteredSlider) return
     const timer = setInterval(() => {
       setCurrentStep(prev => {
         if (prev === steps.length - 1) {
@@ -97,7 +185,7 @@ export default function LandingPage() {
       })
     }, 3000)
     return () => clearInterval(timer)
-  }, [autoPlay])
+  }, [autoPlay, hasEnteredSlider])
 
   useEffect(() => {
     const sequence = [
@@ -334,10 +422,20 @@ export default function LandingPage() {
           Sin ops en la oscuridad.
         </h1>
 
+        {/* 2026-10-19, a pedido de Ana: la jerarquía estaba invertida -- el
+          * párrafo de abajo (la frase de apoyo "Menos seguimiento manual...")
+          * se veía más grande (20px) y el de arriba, que es la descripción
+          * principal justo bajo el H1, más chico (18px) y más apagado
+          * (#A3AEAC). Ahora el de arriba es el más grande y el más claro de
+          * los dos (más blanco, en la misma familia del H1 de arriba pero sin
+          * llegar a su blanco pleno), y el de abajo queda claramente como la
+          * frase de apoyo secundaria: más chica y en el gris más apagado
+          * (#6F7876) que ya usa el resto de la página. */}
         <p style={{
           fontFamily: 'DM Sans, sans-serif',
-          fontSize: '18px',
-          color: '#A3AEAC',
+          fontWeight: 300,
+          fontSize: '21px',
+          color: 'rgba(245,247,247,0.85)',
           margin: '0 0 16px',
           maxWidth: '520px',
           lineHeight: 1.6
@@ -347,7 +445,7 @@ export default function LandingPage() {
 
         <p style={{
           fontFamily: 'DM Sans, sans-serif',
-          fontSize: '20px',
+          fontSize: '17px',
           color: '#6F7876',
           margin: '0 0 40px',
           maxWidth: '520px',
@@ -430,9 +528,16 @@ export default function LandingPage() {
                 boxShadow: '0 0 0 2px rgba(176,255,146,0.2), 0 0 8px 3px rgba(176,255,146,0.4), 0 0 16px 6px rgba(176,255,146,0.15)',
                 marginBottom: '16px'
               }} />
+              {/* 2026-10-19, a pedido de Ana: bajarle un poquito al stroke/
+                * negrita de estos títulos ("Sin visibilidad real", etc).
+                * Estaba en 600, pero Satoshi solo tiene cargados los pesos
+                * 300/400/500/700 (ver index.html) -- al no existir el 600
+                * real, el navegador lo aproximaba al 700 (bold), por eso se
+                * veía más negrita de lo esperado. 500 sí es un peso real de
+                * la fuente, así que queda más fiel y más liviano. */}
               <h3 style={{
                 fontFamily: "'Satoshi', sans-serif",
-                fontWeight: 600,
+                fontWeight: 500,
                 fontSize: '20px',
                 color: '#F5F7F7',
                 margin: '0 0 12px'
@@ -454,7 +559,7 @@ export default function LandingPage() {
       </section>
 
       {/* SLIDER SECTION */}
-      <section style={{
+      <section ref={sliderSectionRef} style={{
         borderTop: '1px solid rgba(255,255,255,0.06)',
         padding: '120px 80px'
       }}>
@@ -768,12 +873,36 @@ export default function LandingPage() {
                 {animStep === 3 && 'Cuando una op necesita atención, Beacon te avisa. Sin revisar manualmente.'}
               </p>
             </div>
+
+            {/* 2026-10-19, a pedido de Ana: puntitos para que se note que esta
+              * tarjeta cambia sola (son 4 pasos) -- a alguien se le mostró y
+              * pasó de largo sin darse cuenta. Van del lado del texto (que es
+              * el que guía la narrativa), no del lado de la animación, y con
+              * el mismo tamaño que el indicador de pasos de "Una op. Tres
+              * estados." más arriba (8px/32px, gap 12px). Fuera del div con
+              * key={animStep} para que no se vuelvan a montar (y por lo tanto
+              * no parpadeen) en cada cambio de paso -- solo el punto activo
+              * se anima suavemente. */}
+            <div style={{ display: 'flex', gap: '12px', marginTop: '28px' }}>
+              {[0, 1, 2, 3].map(i => (
+                <div
+                  key={i}
+                  style={{
+                    width: i === animStep ? '32px' : '8px',
+                    height: '8px',
+                    borderRadius: '4px',
+                    background: i === animStep ? '#B0FF92' : 'rgba(255,255,255,0.15)',
+                    transition: 'all 0.3s ease'
+                  }}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       {/* METRICS SECTION */}
-      <section style={{
+      <section ref={metricsSectionRef} style={{
         padding: '120px 80px',
         borderTop: '1px solid rgba(255,255,255,0.06)',
         display: 'flex',
@@ -781,7 +910,10 @@ export default function LandingPage() {
         alignItems: 'flex-start',
         justifyContent: 'center'
       }}>
-        <div style={{display:'flex', flexDirection:'column', marginBottom:'48px', alignSelf:'flex-end'}}>
+        {/* 2026-10-19, a pedido de Ana: el bloque "Basado en usuarios beta"
+          * quedaba muy pegado a la fila de métricas (13.3 hrs / 3 de 10 /
+          * 100%) de abajo. Margen de separación: 48px -> 80px -> 112px. */}
+        <div style={{display:'flex', flexDirection:'column', marginBottom:'112px', alignSelf:'flex-end'}}>
           <p style={{
             fontFamily: "'Satoshi', sans-serif",
             fontWeight: 300,
@@ -809,13 +941,13 @@ export default function LandingPage() {
 
         <div style={{display:'flex', gap:'240px', justifyContent:'center', width:'100%'}}>
           {[
-            { number: '13.3 hrs', label: 'recuperadas al mes por CAM', animate: false },
-            { number: 'de 10', label: 'ops pierden seguimiento sin Beacon', animate: true },
-            { number: '100%', label: 'de pulse checks generados con IA', animate: false }
-          ].map(metric => (
+            { label: 'recuperadas al mes por CAM', format: v => `${v.toFixed(1)} hrs` },
+            { label: 'ops pierden seguimiento sin Beacon', format: v => `${Math.round(v)} de 10` },
+            { label: 'de pulse checks generados con IA', format: v => `${Math.round(v)}%` }
+          ].map((metric, i) => (
             <div key={metric.label} style={{textAlign: 'center'}}>
-              <p style={{fontFamily:"'Satoshi', sans-serif", fontWeight:700, fontSize:'64px', color:'#F5F7F7', margin:'0 0 8px', letterSpacing:'-0.02em'}}>
-                {metric.animate ? '3 de 10' : metric.number}
+              <p style={{fontFamily:"'Satoshi', sans-serif", fontWeight:700, fontSize:'64px', color:'#F5F7F7', margin:'0 0 8px', letterSpacing:'-0.02em', fontVariantNumeric:'tabular-nums'}}>
+                {metric.format(metricValues[i])}
               </p>
               <p style={{
                 fontFamily: 'DM Sans',

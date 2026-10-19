@@ -381,7 +381,16 @@ export default function OpportunityCard({ oportunidad }) {
         )}
 
         {oportunidad.estado === 'venta_confirmada' && (() => {
-          const periodoAtribucion = parseInt(localStorage.getItem('periodoAtribucion') || '60')
+          // 2026-10-19, a pedido de Ana: el período de atribución real (según
+          // las entrevistas con usuarios) es de 60 días, y así queda configurado
+          // en Perfil > Período de atribución ("60 días, recomendado"). Pero
+          // como los datos de ejemplo tienen fechas fijas (junio 2026) que se
+          // van quedando atrás frente a la fecha real del sistema, este
+          // fallback (el valor que se usa cuando nadie ha tocado el selector
+          // de Configuración, que es el caso de cualquiera que abre el demo)
+          // se sube a 365 para que el demo no muestre "Período vencido" por
+          // mucho tiempo. No afecta el valor real configurable en Perfil.
+          const periodoAtribucion = parseInt(localStorage.getItem('periodoAtribucion') || '365')
           const fechaConfirmacion = oportunidad.pulseChecks?.[oportunidad.pulseChecks.length - 1]?.partnerResponse?.date
           const diasTranscurridos = fechaConfirmacion
             ? Math.floor((new Date() - new Date(fechaConfirmacion)) / (1000 * 60 * 60 * 24))
